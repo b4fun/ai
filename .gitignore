@@ -1,0 +1,5 @@
+node_modules/
+.direnv/
+.npm-global/
+npm-debug.log*
+.DS_Store
