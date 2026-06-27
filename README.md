@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.0-alpha.5
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.0-alpha.6
 ```
 
 Customize the shell wrapper name:
