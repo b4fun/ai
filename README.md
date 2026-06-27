@@ -83,7 +83,7 @@ There is an experimental build path for a standalone binary:
 npm run build:sea
 ```
 
-This bundles the CLI into CommonJS for Node 22 SEA, generates a SEA blob, copies the current Node executable, removes the original macOS signature when needed, injects the blob with the required `NODE_SEA` Mach-O segment, then re-signs the executable. The output lands in `dist/sea/ai` on Unix-like systems.
+This requires Node 25 or newer. It bundles the CLI as ESM for SEA, generates a SEA blob with the experimental warning disabled, copies the current Node executable, removes the original macOS signature when needed, injects the blob with the required `NODE_SEA` Mach-O segment, then re-signs the executable. The output lands in `dist/sea/ai` on Unix-like systems. Release builds currently use Node 25.
 
 GitHub Releases can build and upload prebuilt binaries automatically from `.github/workflows/release.yml` when a release is created or published.
 

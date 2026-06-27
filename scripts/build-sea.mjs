@@ -2,16 +2,21 @@ import { build } from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(rootDir, "dist", "sea");
-const bundlePath = path.join(distDir, "ai.cjs");
+const bundlePath = path.join(distDir, "ai.mjs");
 const seaConfigPath = path.join(distDir, "sea-config.json");
 const seaBlobPath = path.join(distDir, "sea-prep.blob");
 const outputBinaryPath = path.join(distDir, process.platform === "win32" ? "ai.exe" : "ai");
 const postjectBin = path.join(rootDir, "node_modules", ".bin", process.platform === "win32" ? "postject.cmd" : "postject");
 const sentinelFuse = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+
+if (nodeMajor < 25) {
+  throw new Error(`SEA ESM builds require Node 25 or newer. Current Node: ${process.versions.node}`);
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -45,10 +50,10 @@ await build({
   entryPoints: [path.join(rootDir, "bin", "ai.js")],
   bundle: true,
   platform: "node",
-  format: "cjs",
-  target: "node22",
-  define: {
-    "import.meta.url": JSON.stringify(pathToFileURL(bundlePath).href),
+  format: "esm",
+  target: "node25",
+  banner: {
+    js: 'import { createRequire as __seaCreateRequire } from "node:module"; const require = globalThis.require ?? __seaCreateRequire(import.meta.url);',
   },
   outfile: bundlePath,
 });
@@ -58,7 +63,9 @@ fs.writeFileSync(
   JSON.stringify(
     {
       main: bundlePath,
+      mainFormat: "module",
       output: seaBlobPath,
+      disableExperimentalSEAWarning: true,
     },
     null,
     2,
