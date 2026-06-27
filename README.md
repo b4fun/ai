@@ -67,6 +67,25 @@ command ai upgrade v0.1.0-alpha.7
 
 The upgrade helper reinstalls into the current binary's directory and skips shell integration changes.
 
+If you already have shell integration installed and a release changes the wrapper snippet, refresh it after upgrading:
+
+```bash
+command ai upgrade
+command ai shell install zsh --name ai   # or bash/fish
+```
+
+To try a new wrapper in the current shell without editing your rc file, use `eval`/`source` with `shell init`:
+
+```bash
+# zsh/bash: current shell only
+source <(command ai shell init zsh --name ai)
+
+# fish: current shell only
+command ai shell init fish --name ai | source
+```
+
+Use `shell install` when you want the change to persist for future shells; use `shell init` + `source`/`eval` when you only want to refresh or test the current shell.
+
 ## Auth
 
 `ai` uses the same pi credentials. If credentials are missing or a provider rejects them, the CLI can prompt you to log in and retry.
@@ -112,7 +131,7 @@ ai -m anthropic/claude-sonnet-4-5 Explain this project
 ai -m smart --thinking high Plan this refactor
 ```
 
-The CLI joins the remaining arguments into the prompt, so quotes are optional for most plain-language prompts. In zsh, the installed wrapper is also a `noglob` alias, which means prompts containing glob-looking text like `??`, `*`, or `[abc]` can usually be passed unquoted too. Use quotes when you need normal shell quoting behavior, such as preserving extra whitespace, pipes, redirects, variables, or other shell syntax as literal text.
+The CLI joins the remaining arguments into the prompt, so quotes are optional for most plain-language prompts. In zsh, the installed wrapper is also a `noglob` alias, which means prompts containing glob-looking text like `??`, `*`, or `[abc]` can usually be passed unquoted too. The zsh and fish integrations also install small Enter-key hooks that escape apostrophes inside contractions before the shell parses the command, so prompts like `ai what's wrong` and `ai don't change files yet` work naturally. Use quotes when you need normal shell quoting behavior, such as preserving extra whitespace, pipes, redirects, variables, or other shell syntax as literal text.
 
 Pipe stdin to include it as extra prompt context:
 
@@ -201,7 +220,15 @@ command ai shell install bash --name ai
 command ai shell install fish --name ai
 ```
 
-On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. Shell wrappers pass through management commands such as `ai auth`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
+Shell wrapper support status:
+
+| Shell | Short prompt wrapper | Model/thinking flags | Management command passthrough | Glob-friendly prompts | Apostrophes in contractions |
+| --- | --- | --- | --- | --- | --- |
+| zsh | yes | yes | yes | yes, via `noglob` alias | yes, via an `accept-line` widget |
+| fish | yes | yes | yes | normal fish behavior | yes, via an Enter-key binding |
+| bash | yes | yes | yes | normal bash behavior | no; use `what\'s`, double quotes, or stdin |
+
+On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The zsh and fish integrations also install Enter-key hooks for the wrapper command so common apostrophes in contractions are escaped before the shell parses the line. Shell wrappers pass through management commands such as `ai auth`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
 
 ## Sessions
 

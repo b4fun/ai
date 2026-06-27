@@ -37,6 +37,14 @@ test("bash shell wrapper forwards model and thinking flags", () => {
   assert.match(snippet, /set -- -m "\$model" "\$@"/);
 });
 
+test("zsh shell wrapper installs apostrophe accept-line helper", () => {
+  const snippet = runCli(["shell", "init", "zsh", "--name", "ai"]);
+
+  assert.match(snippet, /_escape_apostrophes\(\)/);
+  assert.match(snippet, /_accept_line\(\)/);
+  assert.match(snippet, /zle -A .* accept-line/);
+});
+
 test("fish shell wrapper forwards model and thinking flags", () => {
   const snippet = runCli(["shell", "init", "fish", "--name", "ai"]);
 
@@ -44,6 +52,8 @@ test("fish shell wrapper forwards model and thinking flags", () => {
   assert.match(snippet, /set -l model/);
   assert.match(snippet, /set -l thinking/);
   assert.match(snippet, /case --thinking/);
+  assert.match(snippet, /_escape_apostrophes/);
+  assert.match(snippet, /bind \\r .*_accept_line/);
   assert.match(snippet, /set ai_args --thinking "\$thinking" \$ai_args/);
   assert.match(snippet, /set ai_args -m "\$model" \$ai_args/);
 });
