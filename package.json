@@ -10,11 +10,14 @@
   "files": [
     "bin",
     "src",
+    "scripts",
     "README.md"
   ],
   "scripts": {
     "start": "node bin/ai.js",
-    "check": "node --check src/index.js && node --check bin/ai.js"
+    "check": "node --check src/index.js && node --check bin/ai.js && node --check scripts/build-sea.mjs",
+    "build:sea": "node scripts/build-sea.mjs",
+    "build": "npm run build:sea"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.2",
@@ -23,5 +26,9 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "postject": "^1.0.0-alpha.6"
+  }
 }

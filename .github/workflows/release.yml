@@ -1,0 +1,67 @@
+name: Release binaries
+
+on:
+  release:
+    types:
+      - created
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            asset_name: ai-linux-x64
+          - os: macos-13
+            platform: darwin
+            arch: x64
+            asset_name: ai-darwin-x64
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+            asset_name: ai-darwin-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SEA binary
+        run: npm run build:sea
+
+      - name: Re-sign macOS binary
+        if: runner.os == 'macOS'
+        run: codesign --force --sign - dist/sea/ai
+
+      - name: Prepare release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          cp dist/sea/ai "dist/release/${{ matrix.asset_name }}"
+          chmod 755 "dist/release/${{ matrix.asset_name }}"
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/release/${{ matrix.asset_name }}
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -75,6 +75,18 @@ command ai shell init bash --name ai
 
 On zsh, the installed wrapper uses `noglob`, so prompts like `??` can be passed through unquoted. The real binary is still available with `command ai ...`.
 
+## Experimental SEA build
+
+There is an experimental build path for a standalone binary:
+
+```bash
+npm run build:sea
+```
+
+This bundles the CLI, generates a SEA blob, copies the current Node executable, and injects the blob when `postject` is available. The output lands in `dist/sea/ai` on Unix-like systems. Depending on your Node distribution and platform, you may also need to re-sign the copied executable after injection.
+
+GitHub Releases can build and upload prebuilt binaries automatically from `.github/workflows/release.yml` when a release is created or published.
+
 ## Interactive tools
 
 If you want to run an interactive terminal app, ask for the `foreground` tool:
