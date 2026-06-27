@@ -98,12 +98,19 @@ fi
 
 sha_path="$TMP_DIR/$(basename "$sha_url")"
 if curl -fsSL "$sha_url" -o "$sha_path" 2>/dev/null; then
+  expected_sha="$(awk '{print $1}' "$sha_path")"
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$TMP_DIR" && sha256sum -c "$(basename "$sha_path")")
+    actual_sha="$(sha256sum "$download_path" | awk '{print $1}')"
   elif command -v shasum >/dev/null 2>&1; then
-    (cd "$TMP_DIR" && shasum -a 256 -c "$(basename "$sha_path")")
+    actual_sha="$(shasum -a 256 "$download_path" | awk '{print $1}')"
   else
+    actual_sha=""
     echo "No sha256 checker found; skipping digest verification" >&2
+  fi
+
+  if [ -n "$actual_sha" ] && [ "$actual_sha" != "$expected_sha" ]; then
+    echo "SHA256 digest mismatch for $(basename "$download_path")" >&2
+    exit 1
   fi
 else
   echo "No sha256 digest found; skipping digest verification" >&2

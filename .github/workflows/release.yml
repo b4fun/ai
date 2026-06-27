@@ -56,7 +56,7 @@ jobs:
           cp dist/sea/ai dist/release/package/ai
           chmod 755 dist/release/package/ai
           tar -czf "dist/release/${{ matrix.asset_name }}.tar.gz" -C dist/release/package ai
-          shasum -a 256 "dist/release/${{ matrix.asset_name }}.tar.gz" > "dist/release/${{ matrix.asset_name }}.tar.gz.sha256"
+          (cd dist/release && shasum -a 256 "${{ matrix.asset_name }}.tar.gz" > "${{ matrix.asset_name }}.tar.gz.sha256")
 
       - name: Upload release asset
         if: github.event_name == 'release'
