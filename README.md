@@ -1,10 +1,14 @@
 # @b4fun/ai-cli
 
-Minimal Node.js CLI/module that imports `@earendil-works/pi-coding-agent` and exposes:
+A small Node.js CLI wrapper around `@earendil-works/pi-coding-agent`.
 
-```bash
-ai [-m <model>] <ask llm>
-```
+## What it does
+
+- runs prompts through the pi coding agent
+- streams assistant output to your terminal
+- mirrors command output from tools like `bash`
+- exposes a `foreground` tool for interactive programs like `vim`
+- keeps per-shell sessions and a default model config
 
 ## Install
 
@@ -13,97 +17,67 @@ npm install
 npm link
 ```
 
-## CLI usage
+## Usage
 
 ```bash
+ai "Say hello"
 ai "What files are in this directory?"
-ai -m anthropic/claude-sonnet-4-5 "What files are in this directory?"
-ai --model=openai/gpt-5.1 "Say hello"
+ai -m anthropic/claude-sonnet-4-5 "Explain this project"
 ```
 
-In zsh, unquoted `?` is treated as a glob before `ai` starts. Use quotes, escape `?`, or add a `noglob` alias:
+You can also use a model from config:
 
-```zsh
-ai 'what is inside?'
-ai what is inside\?
-alias ai='noglob ai'
+```json
+{
+  "model": "github-copilot/gpt-5.4-mini"
+}
 ```
 
-While waiting for the first LLM text, `ai` shows a spinner on stderr with the selected model once resolved. If the agent runs a bash command, `ai` mirrors the command and its live output to stderr while pi still captures it for the LLM.
-
-`ai` also exposes a `foreground` tool for interactive terminal programs. Ask for it explicitly when needed:
-
-```bash
-ai 'use the foreground tool to run vim'
-ai 'open nvim in the foreground'
-```
-
-Foreground commands inherit stdin/stdout/stderr, so you can interact with full-screen tools. The LLM only receives the exit code, not the full terminal transcript.
-
-The CLI uses your existing pi authentication/configuration. If needed, authenticate with pi first:
-
-```bash
-pi /login
-```
-
-## Config
-
-`ai` reads its config from:
+The config file lives at:
 
 ```text
 $XDG_HOME/@b4fun-ai/config.json
 ```
 
-If `XDG_HOME` is not set, it falls back to `$XDG_STATE_HOME/@b4fun-ai/config.json`, then `~/.local/state/@b4fun-ai/config.json`.
+If `XDG_HOME` is not set, the CLI falls back to:
 
-Set the default model with either `model` or `defaultModel`:
-
-```json
-{
-  "model": "anthropic/claude-sonnet-4-5"
-}
+```text
+$XDG_STATE_HOME/@b4fun-ai/config.json
+~/Library/Application Support/@b4fun-ai/config.json   (macOS)
+~/.local/state/@b4fun-ai/config.json                  (other platforms)
 ```
 
-The CLI flag overrides the config file:
+## Interactive tools
+
+If you want to run an interactive terminal app, ask for the `foreground` tool:
 
 ```bash
-ai -m openai/gpt-5.1 "Say hello"
+ai "use the foreground tool to run vim"
 ```
-
-Model values can be exact `provider/model-id` strings. Bare model substrings are allowed when they match exactly one model.
-
-These paths and settings are also injected into the agent's base prompt, so you can ask things like:
-
-```bash
-ai 'open my ai config in vim'
-ai 'set my default ai model to anthropic/claude-sonnet-4-5'
-```
-
-When opening config/settings in an editor, the agent is instructed to use the `foreground` tool.
 
 ## Sessions
 
-`ai` persists pi session logs under:
+Sessions are stored under:
 
 ```text
 $XDG_HOME/@b4fun-ai
 ```
 
-If `XDG_HOME` is not set, it falls back to `$XDG_STATE_HOME/@b4fun-ai`, then `~/.local/state/@b4fun-ai`.
+or the same fallback paths listed above.
 
-Invocations from the same parent shell process reuse the most recent session for the current working directory. To force a stable session id across wrappers or shells, set:
+To reuse a stable session across shells, set:
 
 ```bash
 export AI_SESSION_ID=my-session
 ```
 
-## Module usage
+## JavaScript API
 
 ```js
 import { ask } from "@b4fun/ai-cli";
 
 const answer = await ask("Say hello", {
-  model: "anthropic/claude-sonnet-4-5",
+  model: "github-copilot/gpt-5.4-mini",
   write: (chunk) => process.stdout.write(chunk),
 });
 ```

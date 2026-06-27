@@ -16,7 +16,12 @@ import {
 export function getB4funAiHome() {
   const xdgHome = process.env.XDG_HOME;
   const xdgStateHome = process.env.XDG_STATE_HOME;
-  const base = xdgHome || xdgStateHome || path.join(os.homedir(), ".local", "state");
+  const base =
+    xdgHome ||
+    xdgStateHome ||
+    (process.platform === "darwin"
+      ? path.join(os.homedir(), "Library", "Application Support")
+      : path.join(os.homedir(), ".local", "state"));
   return path.join(base, "@b4fun-ai");
 }
 
