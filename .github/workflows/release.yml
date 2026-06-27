@@ -41,9 +41,8 @@ jobs:
       - name: Build SEA binary
         run: npm run build:sea
 
-      - name: Re-sign macOS binary
-        if: runner.os == 'macOS'
-        run: codesign --force --sign - dist/sea/ai
+      - name: Smoke test SEA binary
+        run: dist/sea/ai shell init bash --name ai >/dev/null
 
       - name: Prepare release asset
         shell: bash

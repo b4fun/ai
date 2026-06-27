@@ -2,11 +2,11 @@ import { build } from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(rootDir, "dist", "sea");
-const bundlePath = path.join(distDir, "ai.mjs");
+const bundlePath = path.join(distDir, "ai.cjs");
 const seaConfigPath = path.join(distDir, "sea-config.json");
 const seaBlobPath = path.join(distDir, "sea-prep.blob");
 const outputBinaryPath = path.join(distDir, process.platform === "win32" ? "ai.exe" : "ai");
@@ -45,9 +45,11 @@ await build({
   entryPoints: [path.join(rootDir, "bin", "ai.js")],
   bundle: true,
   platform: "node",
-  format: "esm",
+  format: "cjs",
   target: "node22",
-  external: ["@earendil-works/pi-coding-agent", "typebox"],
+  define: {
+    "import.meta.url": JSON.stringify(pathToFileURL(bundlePath).href),
+  },
   outfile: bundlePath,
 });
 
@@ -69,19 +71,44 @@ fs.copyFileSync(process.execPath, outputBinaryPath);
 fs.chmodSync(outputBinaryPath, 0o755);
 
 if (fileExists(postjectBin)) {
-  run(postjectBin, [
+  if (process.platform === "darwin") {
+    run("codesign", ["--remove-signature", outputBinaryPath]);
+  }
+
+  const postjectArgs = [
     outputBinaryPath,
     "NODE_SEA_BLOB",
     seaBlobPath,
     "--sentinel-fuse",
     sentinelFuse,
     "--overwrite",
-  ]);
+  ];
+
+  if (process.platform === "darwin") {
+    postjectArgs.push("--macho-segment-name", "NODE_SEA");
+  }
+
+  run(postjectBin, postjectArgs);
+
+  if (process.platform === "darwin") {
+    run("codesign", ["--force", "--sign", "-", outputBinaryPath]);
+  }
+
   console.error(`SEA binary written to ${outputBinaryPath}`);
 } else {
   console.error("Built SEA blob and copied the Node executable, but postject was not found.");
   console.error("Run the following command to inject the blob:");
-  console.error(
-    `${process.platform === "win32" ? "postject.cmd" : "postject"} ${outputBinaryPath} NODE_SEA_BLOB ${seaBlobPath} --sentinel-fuse ${sentinelFuse} --overwrite`,
-  );
+  const manualPostjectArgs = [
+    `${process.platform === "win32" ? "postject.cmd" : "postject"}`,
+    outputBinaryPath,
+    "NODE_SEA_BLOB",
+    seaBlobPath,
+    "--sentinel-fuse",
+    sentinelFuse,
+    "--overwrite",
+  ];
+  if (process.platform === "darwin") {
+    manualPostjectArgs.push("--macho-segment-name", "NODE_SEA");
+  }
+  console.error(manualPostjectArgs.join(" "));
 }

@@ -2,7 +2,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ask } from "../src/index.js";
 
 function parseGlobalOptions(argv) {
   let model;
@@ -294,6 +293,7 @@ async function readStdin() {
 }
 
 async function runPrompt(askLlm, model) {
+  const { ask } = await import("../src/index.js");
   const spinner = startSpinner();
   let wroteAssistantText = false;
   let wroteToolOutput = false;
@@ -384,56 +384,63 @@ function printShellInit({ shellName, wrapperName }) {
   process.stdout.write(`${createShellSnippet(shellName, wrapperName)}\n`);
 }
 
-const parsed = (() => {
+async function main() {
+  let parsed;
+
   try {
-    return parseCli(process.argv.slice(2));
+    parsed = parseCli(process.argv.slice(2));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     printUsage();
     process.exit(1);
   }
-})();
 
-if (parsed.mode === "shell") {
-  const shellCommand = parseShellCommand(parsed.argv);
-  const action = shellCommand.action;
+  if (parsed.mode === "shell") {
+    const shellCommand = parseShellCommand(parsed.argv);
+    const action = shellCommand.action;
 
-  try {
-    if (parsed.model) {
-      throw new Error("The model flag is only supported in prompt mode.");
+    try {
+      if (parsed.model) {
+        throw new Error("The model flag is only supported in prompt mode.");
+      }
+
+      if (action !== "init" && action !== "install") {
+        throw new Error(`Unknown shell command: ${action || "(missing)"}`);
+      }
+
+      const shellName = resolveShellNameFromInput(shellCommand.shell);
+      const wrapperName = sanitizeIdentifier(shellCommand.name);
+
+      if (action === "init") {
+        printShellInit({ shellName, wrapperName });
+        return;
+      }
+
+      const rcPath = installShellIntegration({ shellName, wrapperName });
+      console.error(`Installed shell integration for ${wrapperName} in ${rcPath}`);
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      printUsage();
+      process.exit(1);
     }
+  }
 
-    if (action !== "init" && action !== "install") {
-      throw new Error(`Unknown shell command: ${action || "(missing)"}`);
-    }
-
-    const shellName = resolveShellNameFromInput(shellCommand.shell);
-    const wrapperName = sanitizeIdentifier(shellCommand.name);
-
-    if (action === "init") {
-      printShellInit({ shellName, wrapperName });
-      process.exit(0);
-    }
-
-    const rcPath = installShellIntegration({ shellName, wrapperName });
-    console.error(`Installed shell integration for ${wrapperName} in ${rcPath}`);
-    process.exit(0);
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+  const askLlm = resolvePromptText(parsed.promptParts);
+  if (!askLlm) {
     printUsage();
     process.exit(1);
   }
+
+  const stdinText = await readStdin();
+  const combinedPrompt = stdinText.trim()
+    ? `${askLlm}\n\nAdditional context from stdin:\n\n\`\`\`\n${stdinText.trimEnd()}\n\`\`\``
+    : askLlm;
+
+  await runPrompt(combinedPrompt, parsed.model);
 }
 
-const askLlm = resolvePromptText(parsed.promptParts);
-if (!askLlm) {
-  printUsage();
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
-}
-
-const stdinText = await readStdin();
-const combinedPrompt = stdinText.trim()
-  ? `${askLlm}\n\nAdditional context from stdin:\n\n\`\`\`\n${stdinText.trimEnd()}\n\`\`\``
-  : askLlm;
-
-await runPrompt(combinedPrompt, parsed.model);
+});
