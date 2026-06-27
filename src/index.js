@@ -76,8 +76,10 @@ function createB4funSystemPrompt({ configRoot, configPath, sessionDir }) {
   return `You are running inside @b4fun/ai-cli.
 
 CLI/runtime facts:
-- The user invokes this wrapper as: ai [-m <model>] <ask llm>.
+- The direct CLI entry point is: ai prompt <ask llm>.
+- Shell wrappers may forward to the real binary with command ai prompt <ask llm>.
 - The CLI model flag (-m/--model) overrides the default model config for that invocation.
+- The shell integration helpers are available as: ai shell init <shell> and ai shell install <shell>.
 - The @b4fun/ai-cli config root is: ${configRoot}
 - The default model config file is: ${configPath}
 - The default model config JSON shape is: { "model": "provider/model-id" }. The legacy key { "defaultModel": "provider/model-id" } is also accepted.

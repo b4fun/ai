@@ -19,6 +19,16 @@ npm link
 
 ## Usage
 
+The direct CLI entry point is `ai prompt`:
+
+```bash
+command ai prompt "Say hello"
+command ai prompt "What files are in this directory?"
+command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
+```
+
+If you install the shell wrapper, you can keep using the shorter form:
+
 ```bash
 ai "Say hello"
 ai "What files are in this directory?"
@@ -46,6 +56,18 @@ $XDG_STATE_HOME/@b4fun-ai/config.json
 ~/Library/Application Support/@b4fun-ai/config.json   (macOS)
 ~/.local/state/@b4fun-ai/config.json                  (other platforms)
 ```
+
+## Shell integration
+
+Generate shell setup for a wrapper name of your choice:
+
+```bash
+command ai shell init zsh --name a
+command ai shell install zsh --name a
+command ai shell init bash --name ai
+```
+
+On zsh, the installed wrapper uses `noglob`, so prompts like `??` can be passed through unquoted. The real binary is still available with `command ai ...`.
 
 ## Interactive tools
 
