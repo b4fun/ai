@@ -12,6 +12,27 @@ A small Node.js CLI wrapper around `@earendil-works/pi-coding-agent`.
 
 ## Install
 
+Install a prebuilt binary for the current platform and add shell integration:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh
+```
+
+Install a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.0-alpha.3
+```
+
+Customize the shell wrapper name or skip shell integration:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | AI_SHELL_NAME=a sh
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | AI_INSTALL_SHELL=0 sh
+```
+
+Developer install:
+
 ```bash
 npm install
 npm link
@@ -25,6 +46,7 @@ The direct CLI entry point is `ai prompt`:
 command ai prompt "Say hello"
 command ai prompt "What files are in this directory?"
 command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
+command ai version
 ```
 
 If you install the shell wrapper, you can keep using the shorter form:
@@ -85,7 +107,7 @@ npm run build:sea
 
 This requires Node 25 or newer. It bundles the CLI as ESM for SEA, generates a SEA blob with the experimental warning disabled, copies the current Node executable, removes the original macOS signature when needed, injects the blob with the required `NODE_SEA` Mach-O segment, then re-signs the executable. The output lands in `dist/sea/ai` on Unix-like systems. Release builds currently use Node 25.
 
-GitHub Releases can build and upload prebuilt binaries automatically from `.github/workflows/release.yml` when a release is created or published.
+GitHub Releases can build and upload compressed prebuilt binaries plus `.sha256` digest files automatically from `.github/workflows/release.yml` when a release is created or published.
 
 ## Interactive tools
 

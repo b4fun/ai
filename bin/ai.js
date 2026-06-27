@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { VERSION } from "../src/version.js";
 
 function parseGlobalOptions(argv) {
   let model;
@@ -38,6 +39,7 @@ function parseGlobalOptions(argv) {
 function parseShellCommand(argv) {
   let shell;
   let name = "ai";
+  let commandName = "ai";
   const positionals = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -74,6 +76,25 @@ function parseShellCommand(argv) {
       continue;
     }
 
+    if (arg === "--command" || arg === "--binary") {
+      commandName = argv[index + 1];
+      if (!commandName) throw new Error(`${arg} requires a command value`);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--command=")) {
+      commandName = arg.slice("--command=".length);
+      if (!commandName) throw new Error("--command requires a command value");
+      continue;
+    }
+
+    if (arg.startsWith("--binary=")) {
+      commandName = arg.slice("--binary=".length);
+      if (!commandName) throw new Error("--binary requires a command value");
+      continue;
+    }
+
     positionals.push(arg);
   }
 
@@ -89,6 +110,7 @@ function parseShellCommand(argv) {
     action: positionals[0],
     shell,
     name,
+    commandName,
   };
 }
 
@@ -114,6 +136,10 @@ function hiddenFunctionName(name) {
   return `__b4fun_ai_${sanitized}`;
 }
 
+function shellSingleQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
 function getRcPath(shellName) {
   switch (normalizeShellName(shellName)) {
     case "zsh":
@@ -128,6 +154,7 @@ function getRcPath(shellName) {
 }
 
 function createCommonWrapperBody(commandName) {
+  const quotedCommand = shellSingleQuote(commandName);
   return [
     "  local model=",
     "  while [ $# -gt 0 ]; do",
@@ -155,17 +182,16 @@ function createCommonWrapperBody(commandName) {
     "  done",
     "",
     "  if [ -n \"$model\" ]; then",
-    `    command ${commandName} -m \"$model\" prompt \"$@\"`,
+    `    command ${quotedCommand} -m \"$model\" prompt \"$@\"`,
     "  else",
-    `    command ${commandName} prompt \"$@\"`,
+    `    command ${quotedCommand} prompt \"$@\"`,
     "  fi",
   ].join("\n");
 }
 
-function createShellSnippet(shellName, wrapperName) {
+function createShellSnippet(shellName, wrapperName, commandName = "ai") {
   const shell = normalizeShellName(shellName);
   const fnName = hiddenFunctionName(wrapperName);
-  const commandName = "ai";
 
   if (shell === "zsh") {
     return [
@@ -209,9 +235,9 @@ function createShellSnippet(shellName, wrapperName) {
       "    end",
       "",
       "    if test -n \"$model\"",
-      `        command ${commandName} -m \"$model\" prompt $argv`,
+      `        command ${shellSingleQuote(commandName)} -m \"$model\" prompt $argv`,
       "    else",
-      `        command ${commandName} prompt $argv`,
+      `        command ${shellSingleQuote(commandName)} prompt $argv`,
       "    end",
       "end",
     ].join("\n");
@@ -339,7 +365,7 @@ async function runPrompt(askLlm, model) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [prompt <ask llm> | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [prompt <ask llm> | version | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
@@ -347,6 +373,10 @@ function parseCli(argv) {
 
   if (rest[0] === "shell" && (rest[1] === "init" || rest[1] === "install")) {
     return { mode: "shell", model, argv: rest.slice(1) };
+  }
+
+  if (rest[0] === "version") {
+    return { mode: "version", model };
   }
 
   if (rest[0] === "prompt") {
@@ -369,9 +399,9 @@ function resolveShellNameFromInput(shellInput) {
   return shellName;
 }
 
-function installShellIntegration({ shellName, wrapperName }) {
+function installShellIntegration({ shellName, wrapperName, commandName = "ai" }) {
   const rcPath = getRcPath(shellName);
-  const snippet = createShellSnippet(shellName, wrapperName);
+  const snippet = createShellSnippet(shellName, wrapperName, commandName);
   const block = createManagedBlock(snippet);
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, "utf8") : "";
   const next = applyManagedBlock(existing, block);
@@ -380,8 +410,8 @@ function installShellIntegration({ shellName, wrapperName }) {
   return rcPath;
 }
 
-function printShellInit({ shellName, wrapperName }) {
-  process.stdout.write(`${createShellSnippet(shellName, wrapperName)}\n`);
+function printShellInit({ shellName, wrapperName, commandName = "ai" }) {
+  process.stdout.write(`${createShellSnippet(shellName, wrapperName, commandName)}\n`);
 }
 
 async function main() {
@@ -393,6 +423,15 @@ async function main() {
     console.error(error instanceof Error ? error.message : String(error));
     printUsage();
     process.exit(1);
+  }
+
+  if (parsed.mode === "version") {
+    if (parsed.model) {
+      console.error("The model flag is only supported in prompt mode.");
+      process.exit(1);
+    }
+    console.log(VERSION);
+    return;
   }
 
   if (parsed.mode === "shell") {
@@ -410,13 +449,14 @@ async function main() {
 
       const shellName = resolveShellNameFromInput(shellCommand.shell);
       const wrapperName = sanitizeIdentifier(shellCommand.name);
+      const commandName = shellCommand.commandName;
 
       if (action === "init") {
-        printShellInit({ shellName, wrapperName });
+        printShellInit({ shellName, wrapperName, commandName });
         return;
       }
 
-      const rcPath = installShellIntegration({ shellName, wrapperName });
+      const rcPath = installShellIntegration({ shellName, wrapperName, commandName });
       console.error(`Installed shell integration for ${wrapperName} in ${rcPath}`);
       return;
     } catch (error) {

@@ -1,6 +1,6 @@
 {
   "name": "@b4fun/ai-cli",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.4",
   "description": "Minimal CLI wrapper around pi coding agent.",
   "type": "module",
   "main": "src/index.js",
@@ -11,11 +11,12 @@
     "bin",
     "src",
     "scripts",
-    "README.md"
+    "README.md",
+    "install.sh"
   ],
   "scripts": {
     "start": "node bin/ai.js",
-    "check": "node --check src/index.js && node --check bin/ai.js && node --check scripts/build-sea.mjs",
+    "check": "node --check src/index.js && node --check src/version.js && node --check bin/ai.js && node --check scripts/build-sea.mjs",
     "build:sea": "node scripts/build-sea.mjs",
     "build": "npm run build:sea"
   },

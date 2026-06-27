@@ -21,6 +21,10 @@ jobs:
             platform: linux
             arch: x64
             asset_name: ai-linux-x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            asset_name: ai-linux-arm64
           - os: macos-14
             platform: darwin
             arch: arm64
@@ -48,15 +52,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist/release
-          cp dist/sea/ai "dist/release/${{ matrix.asset_name }}"
-          chmod 755 "dist/release/${{ matrix.asset_name }}"
+          mkdir -p dist/release/package
+          cp dist/sea/ai dist/release/package/ai
+          chmod 755 dist/release/package/ai
+          tar -czf "dist/release/${{ matrix.asset_name }}.tar.gz" -C dist/release/package ai
+          shasum -a 256 "dist/release/${{ matrix.asset_name }}.tar.gz" > "dist/release/${{ matrix.asset_name }}.tar.gz.sha256"
 
       - name: Upload release asset
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/release/${{ matrix.asset_name }}
+          files: |
+            dist/release/${{ matrix.asset_name }}.tar.gz
+            dist/release/${{ matrix.asset_name }}.tar.gz.sha256
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
