@@ -152,7 +152,7 @@ To switch from the lightweight wrapper into full interactive pi, use:
 ai pi
 ```
 
-This starts pi with the same session directory used by `ai` and continues the most recent session for the current working directory. Model aliases and thinking settings from `ai` config are resolved before launching pi, and `-m/--model` or `--thinking` overrides are forwarded too:
+This requires the `pi` command to be installed locally and available on `PATH`. It starts pi with the same session directory used by `ai` and continues the most recent session for the current working directory. Model aliases and thinking settings from `ai` config are resolved before launching pi, and `-m/--model` or `--thinking` overrides are forwarded too:
 
 ```bash
 ai -m smart --thinking high pi
@@ -257,17 +257,6 @@ By default, sessions are grouped by parent shell process. To reuse a stable sess
 
 ```bash
 export AI_SESSION_ID=my-session
-```
-
-## JavaScript API
-
-```js
-import { ask } from "@b4fun/ai-cli";
-
-const answer = await ask("Say hello", {
-  model: "github-copilot/gpt-5.4-mini",
-  write: (chunk) => process.stdout.write(chunk),
-});
 ```
 
 ## Build a standalone binary

@@ -3,43 +3,8 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { getShellSessionDir, readConfig } from "../src/config.js";
 import { VERSION } from "../src/version.js";
-
-function getB4funAiHome() {
-  const xdgHome = process.env.XDG_HOME;
-  const xdgStateHome = process.env.XDG_STATE_HOME;
-  const base =
-    xdgHome ||
-    xdgStateHome ||
-    (process.platform === "darwin"
-      ? path.join(os.homedir(), "Library", "Application Support")
-      : path.join(os.homedir(), ".local", "state"));
-  return path.join(base, "@b4fun-ai");
-}
-
-function safeSessionName(value) {
-  return value.replace(/[^A-Za-z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "default";
-}
-
-function getShellSessionDir() {
-  const shellId = process.env.AI_SESSION_ID || String(process.ppid || "default");
-  return path.join(getB4funAiHome(), "sessions", `shell-${safeSessionName(shellId)}`);
-}
-
-function getConfigPath() {
-  return path.join(getB4funAiHome(), "config.json");
-}
-
-function readConfig() {
-  const configPath = getConfigPath();
-  if (!fs.existsSync(configPath)) return {};
-
-  try {
-    return JSON.parse(fs.readFileSync(configPath, "utf8"));
-  } catch (error) {
-    throw new Error(`Failed to read config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
 
 function parseGlobalOptions(argv) {
   let model;
@@ -787,8 +752,18 @@ async function runPi(argv, model, thinkingLevel) {
   if (resolved.modelSpec) args.push("--model", resolved.modelSpec);
   if (resolved.thinkingLevel) args.push("--thinking", resolved.thinkingLevel);
 
-  const { main } = await import("@earendil-works/pi-coding-agent");
-  await main(args);
+  const result = spawnSync("pi", args, {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  if (result.error?.code === "ENOENT") {
+    throw new Error("pi is not installed or is not on PATH. Install @earendil-works/pi-coding-agent locally to use 'ai pi'.");
+  }
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`pi exited with code ${result.status ?? 1}`);
+  }
 }
 
 async function runAuth(argv) {
