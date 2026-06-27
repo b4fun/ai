@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -312,6 +313,41 @@ function applyManagedBlock(existing, block) {
   return `${existing}${separator}${block}`;
 }
 
+function getDefaultInstallDir() {
+  return path.join(os.homedir(), ".local", "bin");
+}
+
+function getUpgradeInstallDir() {
+  if (process.env.AI_INSTALL_DIR) return process.env.AI_INSTALL_DIR;
+
+  const execBasename = path.basename(process.execPath).toLowerCase();
+  if (execBasename === "ai" || execBasename === "ai.exe") {
+    return path.dirname(process.execPath);
+  }
+
+  return getDefaultInstallDir();
+}
+
+function runUpgrade(version = "latest") {
+  const installDir = getUpgradeInstallDir();
+  const installScriptUrl = "https://raw.githubusercontent.com/b4fun/ai/main/install.sh";
+  const command = [
+    `curl -fsSL ${shellSingleQuote(installScriptUrl)}`,
+    `AI_INSTALL_DIR=${shellSingleQuote(installDir)} AI_INSTALL_SHELL=0 sh -s -- ${shellSingleQuote(version)}`,
+  ].join(" | ");
+
+  console.error(`Upgrading ai to ${version} in ${installDir}`);
+  const result = spawnSync("/bin/sh", ["-c", command], {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`Upgrade failed with exit code ${result.status ?? 1}`);
+  }
+}
+
 function startSpinner(label = "Waiting for LLM") {
   if (!process.stderr.isTTY) return { stop() {}, setLabel() {} };
 
@@ -411,7 +447,7 @@ async function runPrompt(askLlm, model, thinkingLevel) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | version | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | version | upgrade [version] | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
@@ -423,6 +459,10 @@ function parseCli(argv) {
 
   if (rest[0] === "version") {
     return { mode: "version", model, thinkingLevel };
+  }
+
+  if (rest[0] === "upgrade") {
+    return { mode: "upgrade", model, thinkingLevel, argv: rest.slice(1) };
   }
 
   if (rest[0] === "prompt") {
@@ -478,6 +518,27 @@ async function main() {
     }
     console.log(VERSION);
     return;
+  }
+
+  if (parsed.mode === "upgrade") {
+    if (parsed.model || parsed.thinkingLevel) {
+      console.error("The model and thinking flags are only supported in prompt mode.");
+      process.exit(1);
+    }
+
+    if (parsed.argv.length > 1) {
+      console.error(`Unexpected upgrade arguments: ${parsed.argv.slice(1).join(" ")}`);
+      printUsage();
+      process.exit(1);
+    }
+
+    try {
+      runUpgrade(parsed.argv[0] || "latest");
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   }
 
   if (parsed.mode === "shell") {

@@ -53,6 +53,20 @@ npm install
 npm link
 ```
 
+Upgrade the installed binary to the latest release:
+
+```bash
+command ai upgrade
+```
+
+Upgrade to a specific release:
+
+```bash
+command ai upgrade v0.1.0-alpha.6
+```
+
+The upgrade helper reinstalls into the current binary's directory and skips shell integration changes.
+
 ## Usage
 
 The direct CLI entry point is `ai prompt`:
@@ -63,6 +77,7 @@ command ai prompt "What files are in this directory?"
 command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
 command ai -m smart --thinking high prompt "Plan this refactor"
 command ai version
+command ai upgrade
 ```
 
 If you install the shell wrapper, you can use the shorter form:

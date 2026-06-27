@@ -167,6 +167,7 @@ CLI/runtime facts:
 - The CLI model flag (-m/--model) overrides the default model config for that invocation.
 - The CLI thinking flag (--thinking) overrides config or alias thinking for that invocation.
 - The shell integration helpers are available as: ai shell init <shell> and ai shell install <shell>.
+- The upgrade helper is available as: ai upgrade [version].
 - The @b4fun/ai-cli config root is: ${configRoot}
 - The default model config file is: ${configPath}
 - The default model config JSON shape is: { "model": "provider/model-id" }. The legacy key { "defaultModel": "provider/model-id" } is also accepted.
