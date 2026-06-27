@@ -118,6 +118,7 @@ command ai -m anthropic/claude-sonnet-4-5 prompt Explain this project
 command ai -m smart --thinking high prompt Plan this refactor
 command ai version
 command ai --version
+command ai pi
 command ai auth login github-copilot
 command ai upgrade
 ```
@@ -143,6 +144,18 @@ For interactive terminal programs, ask the agent to use the `foreground` tool:
 
 ```bash
 ai use the foreground tool to run vim README.md
+```
+
+To switch from the lightweight wrapper into full interactive pi, use:
+
+```bash
+ai pi
+```
+
+This starts pi with the same session directory used by `ai` and continues the most recent session for the current working directory. Model aliases and thinking settings from `ai` config are resolved before launching pi, and `-m/--model` or `--thinking` overrides are forwarded too:
+
+```bash
+ai -m smart --thinking high pi
 ```
 
 ## Models and config
@@ -228,7 +241,7 @@ Shell wrapper support status:
 | fish | yes | yes | yes | normal fish behavior | yes, via an Enter-key binding |
 | bash | yes | yes | yes | normal bash behavior | no; use `what\'s`, double quotes, or stdin |
 
-On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The zsh and fish integrations also install Enter-key hooks for the wrapper command so common apostrophes in contractions are escaped before the shell parses the line. Shell wrappers pass through management commands such as `ai auth`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
+On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The zsh and fish integrations also install Enter-key hooks for the wrapper command so common apostrophes in contractions are escaped before the shell parses the line. Shell wrappers pass through management commands such as `ai auth`, `ai pi`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
 
 ## Sessions
 

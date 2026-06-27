@@ -5,6 +5,42 @@ import os from "node:os";
 import path from "node:path";
 import { VERSION } from "../src/version.js";
 
+function getB4funAiHome() {
+  const xdgHome = process.env.XDG_HOME;
+  const xdgStateHome = process.env.XDG_STATE_HOME;
+  const base =
+    xdgHome ||
+    xdgStateHome ||
+    (process.platform === "darwin"
+      ? path.join(os.homedir(), "Library", "Application Support")
+      : path.join(os.homedir(), ".local", "state"));
+  return path.join(base, "@b4fun-ai");
+}
+
+function safeSessionName(value) {
+  return value.replace(/[^A-Za-z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "default";
+}
+
+function getShellSessionDir() {
+  const shellId = process.env.AI_SESSION_ID || String(process.ppid || "default");
+  return path.join(getB4funAiHome(), "sessions", `shell-${safeSessionName(shellId)}`);
+}
+
+function getConfigPath() {
+  return path.join(getB4funAiHome(), "config.json");
+}
+
+function readConfig() {
+  const configPath = getConfigPath();
+  if (!fs.existsSync(configPath)) return {};
+
+  try {
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Failed to read config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function parseGlobalOptions(argv) {
   let model;
   let thinkingLevel;
@@ -172,7 +208,7 @@ function createCommonWrapperBody(commandName) {
   const quotedCommand = shellSingleQuote(commandName);
   return [
     "  case \"${1-}\" in",
-    "    auth|upgrade|version|shell)",
+    "    auth|pi|upgrade|version|shell)",
     `      command ${quotedCommand} \"$@\"`,
     "      return $?",
     "      ;;",
@@ -291,7 +327,7 @@ function createZshApostropheWidget(wrapperName, fnName) {
     "    local rest=\"$match[3]\"",
     "    local first=\"${rest%%[[:space:]]*}\"",
     "    case \"$first\" in",
-    "      auth|upgrade|version|shell) ;;",
+    "      auth|pi|upgrade|version|shell) ;;",
     "      *)",
     `        ${escapeFn} \"$rest\"`,
     `        BUFFER=\"\${prefix}${wrapper} $REPLY\"`,
@@ -380,7 +416,7 @@ function createFishApostropheBindings(wrapperName) {
     "        set -l rest $matches[3]",
     "        set -l first (string match -r '^[^[:space:]]+' -- $rest)",
     "        switch $first",
-    "            case auth upgrade version shell",
+    "            case auth pi upgrade version shell",
     "            case '*'",
     `                set -l escaped (${escapeFn} "$rest")`,
     `                commandline -r \"$prefix${wrapper} $escaped\"`,
@@ -422,7 +458,7 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
     return [
       `function ${sanitizeIdentifier(wrapperName)}`,
       "    switch $argv[1]",
-      "        case auth upgrade version shell",
+      "        case auth pi upgrade version shell",
       `            command ${shellSingleQuote(commandName)} $argv`,
       "            return $status",
       "    end",
@@ -736,6 +772,25 @@ async function runPrompt(askLlm, model, thinkingLevel) {
   }
 }
 
+async function runPi(argv, model, thinkingLevel) {
+  if (argv.length > 0) {
+    throw new Error(`Unexpected pi arguments: ${argv.join(" ")}`);
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY) {
+    throw new Error("Starting pi requires an interactive terminal.");
+  }
+
+  const { resolveConfiguredModel } = await import("../src/model-config.js");
+  const resolved = resolveConfiguredModel(readConfig(), model, thinkingLevel);
+  const args = ["--session-dir", getShellSessionDir(), "--continue"];
+  if (resolved.modelSpec) args.push("--model", resolved.modelSpec);
+  if (resolved.thinkingLevel) args.push("--thinking", resolved.thinkingLevel);
+
+  const { main } = await import("@earendil-works/pi-coding-agent");
+  await main(args);
+}
+
 async function runAuth(argv) {
   const action = argv[0];
   const provider = argv[1];
@@ -757,7 +812,7 @@ async function runAuth(argv) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
@@ -781,6 +836,10 @@ function parseCli(argv) {
 
   if (rest[0] === "auth") {
     return { mode: "auth", model, thinkingLevel, argv: rest.slice(1) };
+  }
+
+  if (rest[0] === "pi") {
+    return { mode: "pi", model, thinkingLevel, argv: rest.slice(1) };
   }
 
   if (rest[0] === "prompt") {
@@ -855,6 +914,17 @@ async function main() {
       return;
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  if (parsed.mode === "pi") {
+    try {
+      await runPi(parsed.argv, parsed.model, parsed.thinkingLevel);
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      printUsage();
       process.exit(1);
     }
   }

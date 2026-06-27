@@ -26,10 +26,19 @@ test("rejects prompt-only flags for upgrade command", () => {
   assert.match(result.stderr, /model and thinking flags are only supported in prompt mode/i);
 });
 
+test("pi command requires an interactive terminal", () => {
+  const result = spawnSync(node, [cli, "pi"], {
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Starting pi requires an interactive terminal/);
+});
+
 test("bash shell wrapper forwards model and thinking flags", () => {
   const snippet = runCli(["shell", "init", "bash", "--name", "ai"]);
 
-  assert.match(snippet, /auth\|upgrade\|version\|shell/);
+  assert.match(snippet, /auth\|pi\|upgrade\|version\|shell/);
   assert.match(snippet, /local model=/);
   assert.match(snippet, /local thinking=/);
   assert.match(snippet, /--thinking\)/);
@@ -48,7 +57,7 @@ test("zsh shell wrapper installs apostrophe accept-line helper", () => {
 test("fish shell wrapper forwards model and thinking flags", () => {
   const snippet = runCli(["shell", "init", "fish", "--name", "ai"]);
 
-  assert.match(snippet, /case auth upgrade version shell/);
+  assert.match(snippet, /case auth pi upgrade version shell/);
   assert.match(snippet, /set -l model/);
   assert.match(snippet, /set -l thinking/);
   assert.match(snippet, /case --thinking/);

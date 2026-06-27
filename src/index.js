@@ -82,6 +82,7 @@ CLI/runtime facts:
 - The CLI model flag (-m/--model) overrides the default model config for that invocation.
 - The CLI thinking flag (--thinking) overrides config or alias thinking for that invocation.
 - The shell integration helpers are available as: ai shell init <shell> and ai shell install <shell>.
+- The pi handoff helper is available as: ai pi. It starts interactive pi with the same session directory and continues the recent shell session.
 - Auth helpers are available as: ai auth login [provider] and ai auth status [provider].
 - The upgrade helper is available as: ai upgrade [version].
 - The @b4fun/ai-cli config root is: ${configRoot}
