@@ -418,6 +418,59 @@ function startSpinner(label = "Waiting for LLM") {
   };
 }
 
+function startInputGuard() {
+  if (!process.stdin.isTTY) return { pause() {}, resume() {}, stop() {} };
+
+  const wasRaw = process.stdin.isRaw;
+  let stopped = false;
+  let paused = false;
+
+  const onData = (chunk) => {
+    if (paused) return;
+
+    // Raw mode prevents cursor/control escape sequences from being echoed while
+    // the agent is running. Preserve Ctrl+C as the expected way to cancel.
+    if (chunk.includes(3)) {
+      stop();
+      process.kill(process.pid, "SIGINT");
+    }
+  };
+
+  const start = () => {
+    process.stdin.setRawMode?.(true);
+    process.stdin.resume();
+    process.stdin.on("data", onData);
+  };
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    process.stdin.off("data", onData);
+    process.stdin.setRawMode?.(wasRaw ?? false);
+    process.stdin.pause();
+  };
+
+  start();
+
+  return {
+    pause() {
+      if (stopped || paused) return;
+      paused = true;
+      process.stdin.off("data", onData);
+      process.stdin.setRawMode?.(wasRaw ?? false);
+      process.stdin.pause();
+    },
+    resume() {
+      if (stopped || !paused) return;
+      paused = false;
+      process.stdin.setRawMode?.(true);
+      process.stdin.resume();
+      process.stdin.on("data", onData);
+    },
+    stop,
+  };
+}
+
 function formatCommand(args) {
   return typeof args?.command === "string" ? args.command : undefined;
 }
@@ -444,6 +497,7 @@ async function runPrompt(askLlm, model, thinkingLevel) {
 
   const runOnce = async () => {
     const spinner = startSpinner();
+    const inputGuard = startInputGuard();
     let wroteAssistantText = false;
     let wroteToolOutput = false;
 
@@ -465,6 +519,7 @@ async function runPrompt(askLlm, model, thinkingLevel) {
         },
         onToolStart: ({ name, args }) => {
           if (name !== "bash" && name !== "foreground") return;
+          if (name === "foreground") inputGuard.pause();
           spinner.pause();
           const command = formatCommand(args);
           process.stderr.write(`\n$ ${command ?? name}\n`);
@@ -483,11 +538,14 @@ async function runPrompt(askLlm, model, thinkingLevel) {
           spinner.pause();
           if (isError) process.stderr.write("\n[command failed]\n");
           spinner.resume();
+          if (name === "foreground") inputGuard.resume();
         },
       });
+      inputGuard.stop();
       spinner.stop();
       process.stdout.write("\n");
     } catch (error) {
+      inputGuard.stop();
       spinner.stop();
       throw error;
     }
