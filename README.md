@@ -77,6 +77,7 @@ command ai prompt "What files are in this directory?"
 command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
 command ai -m smart --thinking high prompt "Plan this refactor"
 command ai version
+command ai --version
 command ai upgrade
 ```
 

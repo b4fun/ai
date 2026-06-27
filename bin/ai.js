@@ -451,6 +451,10 @@ function printUsage() {
 }
 
 function parseCli(argv) {
+  if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v")) {
+    return { mode: "version", model: undefined, thinkingLevel: undefined };
+  }
+
   const { model, thinkingLevel, rest } = parseGlobalOptions(argv);
 
   if (rest[0] === "shell" && (rest[1] === "init" || rest[1] === "install")) {
