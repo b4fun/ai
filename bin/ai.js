@@ -348,17 +348,33 @@ function runUpgrade(version = "latest") {
   }
 }
 
+const ANSI_DIM = "\x1b[2m";
+const ANSI_RESET = "\x1b[0m";
+
 function startSpinner(label = "Waiting for LLM") {
-  if (!process.stderr.isTTY) return { stop() {}, setLabel() {} };
+  if (!process.stderr.isTTY) return { stop() {}, setLabel() {}, pause() {}, resume() {} };
 
   const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   let index = 0;
   let stopped = false;
+  let paused = false;
+  let visible = false;
 
-  const render = () => {
+  const clear = () => {
+    if (!visible) return;
     process.stderr.clearLine(0);
     process.stderr.cursorTo(0);
-    process.stderr.write(`${frames[index++ % frames.length]} ${label}`);
+    visible = false;
+  };
+
+  const render = () => {
+    if (stopped || paused) return;
+    if (visible) {
+      process.stderr.clearLine(0);
+      process.stderr.cursorTo(0);
+    }
+    process.stderr.write(`${ANSI_DIM}${frames[index++ % frames.length]} ${label}${ANSI_RESET}`);
+    visible = true;
   };
 
   render();
@@ -370,12 +386,21 @@ function startSpinner(label = "Waiting for LLM") {
       label = nextLabel;
       render();
     },
+    pause() {
+      if (stopped || paused) return;
+      paused = true;
+      clear();
+    },
+    resume() {
+      if (stopped || !paused) return;
+      paused = false;
+      render();
+    },
     stop() {
       if (stopped) return;
       stopped = true;
       clearInterval(timer);
-      process.stderr.clearLine(0);
-      process.stderr.cursorTo(0);
+      clear();
     },
   };
 }
@@ -413,28 +438,32 @@ async function runPrompt(askLlm, model, thinkingLevel) {
         spinner.setLabel(`Waiting for LLM (${provider}/${id}${thinkingLabel})`);
       },
       write: (chunk) => {
-        spinner.stop();
+        spinner.pause();
         if (wroteToolOutput && !wroteAssistantText) process.stderr.write("\n");
         wroteAssistantText = true;
         process.stdout.write(chunk);
+        if (chunk.endsWith("\n")) spinner.resume();
       },
       onToolStart: ({ name, args }) => {
-        spinner.stop();
         if (name !== "bash" && name !== "foreground") return;
+        spinner.pause();
         const command = formatCommand(args);
         process.stderr.write(`\n$ ${command ?? name}\n`);
+        spinner.resume();
         wroteToolOutput = true;
       },
       onToolOutput: ({ name, chunk }) => {
-        spinner.stop();
         if (name !== "bash") return;
+        spinner.pause();
         process.stderr.write(chunk);
+        if (chunk.endsWith("\n")) spinner.resume();
         wroteToolOutput = true;
       },
       onToolEnd: ({ name, isError }) => {
-        spinner.stop();
         if (name !== "bash" && name !== "foreground") return;
+        spinner.pause();
         if (isError) process.stderr.write("\n[command failed]\n");
+        spinner.resume();
       },
     });
     spinner.stop();
