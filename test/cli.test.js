@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import test from "node:test";
+import { VERSION } from "../src/version.js";
 
 const node = process.execPath;
 const cli = new URL("../bin/ai.js", import.meta.url).pathname;
@@ -10,11 +11,11 @@ function runCli(args) {
 }
 
 test("prints package version with version command", () => {
-  assert.match(runCli(["version"]), /^0\.1\.0-alpha\.7\n$/);
+  assert.equal(runCli(["version"]), `${VERSION}\n`);
 });
 
 test("prints package version with --version flag", () => {
-  assert.match(runCli(["--version"]), /^0\.1\.0-alpha\.7\n$/);
+  assert.equal(runCli(["--version"]), `${VERSION}\n`);
 });
 
 test("rejects prompt-only flags for upgrade command", () => {
