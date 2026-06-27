@@ -3,22 +3,32 @@ import { ask } from "../src/index.js";
 
 function parseArgs(argv) {
   let model;
+  let promptStarted = false;
   const promptParts = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
-    if (arg === "-m" || arg === "--model") {
-      model = argv[index + 1];
-      if (!model) throw new Error(`${arg} requires a model value`);
-      index += 1;
-      continue;
-    }
+    if (!promptStarted) {
+      if (arg === "--") {
+        promptStarted = true;
+        continue;
+      }
 
-    if (arg.startsWith("--model=")) {
-      model = arg.slice("--model=".length);
-      if (!model) throw new Error("--model requires a model value");
-      continue;
+      if (arg === "-m" || arg === "--model") {
+        model = argv[index + 1];
+        if (!model) throw new Error(`${arg} requires a model value`);
+        index += 1;
+        continue;
+      }
+
+      if (arg.startsWith("--model=")) {
+        model = arg.slice("--model=".length);
+        if (!model) throw new Error("--model requires a model value");
+        continue;
+      }
+
+      promptStarted = true;
     }
 
     promptParts.push(arg);
