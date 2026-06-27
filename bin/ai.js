@@ -6,6 +6,7 @@ import { VERSION } from "../src/version.js";
 
 function parseGlobalOptions(argv) {
   let model;
+  let thinkingLevel;
   const rest = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -13,7 +14,7 @@ function parseGlobalOptions(argv) {
 
     if (arg === "--") {
       rest.push(...argv.slice(index + 1));
-      return { model, rest };
+      return { model, thinkingLevel, rest };
     }
 
     if (arg === "-m" || arg === "--model") {
@@ -29,11 +30,24 @@ function parseGlobalOptions(argv) {
       continue;
     }
 
+    if (arg === "--thinking") {
+      thinkingLevel = argv[index + 1];
+      if (!thinkingLevel) throw new Error("--thinking requires a level value");
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--thinking=")) {
+      thinkingLevel = arg.slice("--thinking=".length);
+      if (!thinkingLevel) throw new Error("--thinking requires a level value");
+      continue;
+    }
+
     rest.push(...argv.slice(index));
-    return { model, rest };
+    return { model, thinkingLevel, rest };
   }
 
-  return { model, rest };
+  return { model, thinkingLevel, rest };
 }
 
 function parseShellCommand(argv) {
@@ -157,6 +171,7 @@ function createCommonWrapperBody(commandName) {
   const quotedCommand = shellSingleQuote(commandName);
   return [
     "  local model=",
+    "  local thinking=",
     "  while [ $# -gt 0 ]; do",
     "    case \"$1\" in",
     "      -m|--model)",
@@ -171,6 +186,18 @@ function createCommonWrapperBody(commandName) {
     '        model=${1#--model=}',
     "        shift",
     "        ;;",
+    "      --thinking)",
+    "        if [ $# -lt 2 ]; then",
+    "          printf '%s\\n' \"$1 requires a level value\" >&2",
+    "          return 1",
+    "        fi",
+    "        thinking=$2",
+    "        shift 2",
+    "        ;;",
+    '      --thinking=*)',
+    '        thinking=${1#--thinking=}',
+    "        shift",
+    "        ;;",
     "      --)",
     "        shift",
     "        break",
@@ -181,11 +208,14 @@ function createCommonWrapperBody(commandName) {
     "    esac",
     "  done",
     "",
-    "  if [ -n \"$model\" ]; then",
-    `    command ${quotedCommand} -m \"$model\" prompt \"$@\"`,
-    "  else",
-    `    command ${quotedCommand} prompt \"$@\"`,
+    "  set -- prompt \"$@\"",
+    "  if [ -n \"$thinking\" ]; then",
+    "    set -- --thinking \"$thinking\" \"$@\"",
     "  fi",
+    "  if [ -n \"$model\" ]; then",
+    "    set -- -m \"$model\" \"$@\"",
+    "  fi",
+    `    command ${quotedCommand} \"$@\"`,
   ].join("\n");
 }
 
@@ -214,17 +244,28 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
     return [
       `function ${sanitizeIdentifier(wrapperName)}`,
       "    set -l model",
+      "    set -l thinking",
       "    while test (count $argv) -gt 0",
       "        switch $argv[1]",
       "            case -m --model",
       "                if test (count $argv) -lt 2",
-      "                    printf '%s\n' \"$argv[1] requires a model value\" >&2",
+      "                    printf '%s\\n' \"$argv[1] requires a model value\" >&2",
       "                    return 1",
       "                end",
       "                set model $argv[2]",
       "                set argv $argv[3..-1]",
       "            case --model=*",
       "                set model (string split -m1 '=' -- $argv[1])[2]",
+      "                set argv $argv[2..-1]",
+      "            case --thinking",
+      "                if test (count $argv) -lt 2",
+      "                    printf '%s\\n' \"$argv[1] requires a level value\" >&2",
+      "                    return 1",
+      "                end",
+      "                set thinking $argv[2]",
+      "                set argv $argv[3..-1]",
+      "            case --thinking=*",
+      "                set thinking (string split -m1 '=' -- $argv[1])[2]",
       "                set argv $argv[2..-1]",
       "            case --",
       "                set argv $argv[2..-1]",
@@ -234,11 +275,14 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
       "        end",
       "    end",
       "",
-      "    if test -n \"$model\"",
-      `        command ${shellSingleQuote(commandName)} -m \"$model\" prompt $argv`,
-      "    else",
-      `        command ${shellSingleQuote(commandName)} prompt $argv`,
+      "    set -l ai_args prompt $argv",
+      "    if test -n \"$thinking\"",
+      "        set ai_args --thinking \"$thinking\" $ai_args",
       "    end",
+      "    if test -n \"$model\"",
+      "        set ai_args -m \"$model\" $ai_args",
+      "    end",
+      `    command ${shellSingleQuote(commandName)} $ai_args`,
       "end",
     ].join("\n");
   }
@@ -318,7 +362,7 @@ async function readStdin() {
   });
 }
 
-async function runPrompt(askLlm, model) {
+async function runPrompt(askLlm, model, thinkingLevel) {
   const { ask } = await import("../src/index.js");
   const spinner = startSpinner();
   let wroteAssistantText = false;
@@ -327,8 +371,10 @@ async function runPrompt(askLlm, model) {
   try {
     await ask(askLlm, {
       model,
-      onModel: ({ provider, id }) => {
-        spinner.setLabel(`Waiting for LLM (${provider}/${id})`);
+      thinkingLevel,
+      onModel: ({ provider, id, thinkingLevel: activeThinkingLevel }) => {
+        const thinkingLabel = activeThinkingLevel ? `, thinking ${activeThinkingLevel}` : "";
+        spinner.setLabel(`Waiting for LLM (${provider}/${id}${thinkingLabel})`);
       },
       write: (chunk) => {
         spinner.stop();
@@ -365,25 +411,25 @@ async function runPrompt(askLlm, model) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [prompt <ask llm> | version | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | version | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
-  const { model, rest } = parseGlobalOptions(argv);
+  const { model, thinkingLevel, rest } = parseGlobalOptions(argv);
 
   if (rest[0] === "shell" && (rest[1] === "init" || rest[1] === "install")) {
-    return { mode: "shell", model, argv: rest.slice(1) };
+    return { mode: "shell", model, thinkingLevel, argv: rest.slice(1) };
   }
 
   if (rest[0] === "version") {
-    return { mode: "version", model };
+    return { mode: "version", model, thinkingLevel };
   }
 
   if (rest[0] === "prompt") {
-    return { mode: "prompt", model, promptParts: rest.slice(1) };
+    return { mode: "prompt", model, thinkingLevel, promptParts: rest.slice(1) };
   }
 
-  return { mode: "prompt", model, promptParts: rest };
+  return { mode: "prompt", model, thinkingLevel, promptParts: rest };
 }
 
 function resolvePromptText(promptParts) {
@@ -426,8 +472,8 @@ async function main() {
   }
 
   if (parsed.mode === "version") {
-    if (parsed.model) {
-      console.error("The model flag is only supported in prompt mode.");
+    if (parsed.model || parsed.thinkingLevel) {
+      console.error("The model and thinking flags are only supported in prompt mode.");
       process.exit(1);
     }
     console.log(VERSION);
@@ -439,8 +485,8 @@ async function main() {
     const action = shellCommand.action;
 
     try {
-      if (parsed.model) {
-        throw new Error("The model flag is only supported in prompt mode.");
+      if (parsed.model || parsed.thinkingLevel) {
+        throw new Error("The model and thinking flags are only supported in prompt mode.");
       }
 
       if (action !== "init" && action !== "install") {
@@ -477,7 +523,7 @@ async function main() {
     ? `${askLlm}\n\nAdditional context from stdin:\n\n\`\`\`\n${stdinText.trimEnd()}\n\`\`\``
     : askLlm;
 
-  await runPrompt(combinedPrompt, parsed.model);
+  await runPrompt(combinedPrompt, parsed.model, parsed.thinkingLevel);
 }
 
 main().catch((error) => {

@@ -17,7 +17,7 @@ Smart base models can usually follow a few local rules and knock out focused tas
 - Mirrors `bash` tool output to your terminal
 - Adds a `foreground` tool for interactive programs such as `vim`, `less`, `top`, and REPLs
 - Persists sessions per shell, with an optional stable `AI_SESSION_ID`
-- Supports a default model config plus per-command `-m/--model` overrides
+- Supports default models, model aliases, thinking levels, and per-command overrides
 - Installs optional shell wrappers for zsh, bash, and fish
 
 ## Install
@@ -61,6 +61,7 @@ The direct CLI entry point is `ai prompt`:
 command ai prompt "Say hello"
 command ai prompt "What files are in this directory?"
 command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
+command ai -m smart --thinking high prompt "Plan this refactor"
 command ai version
 ```
 
@@ -70,6 +71,7 @@ If you install the shell wrapper, you can use the shorter form:
 ai "Say hello"
 ai "What files are in this directory?"
 ai -m anthropic/claude-sonnet-4-5 "Explain this project"
+ai -m smart --thinking high "Plan this refactor"
 ```
 
 Pipe stdin to include it as extra prompt context:
@@ -86,10 +88,11 @@ ai "use the foreground tool to run vim README.md"
 
 ## Models and config
 
-Use `-m` or `--model` to override the model for one invocation:
+Use `-m` or `--model` to override the model for one invocation. Use `--thinking` to override the thinking level:
 
 ```bash
 ai -m github-copilot/gpt-5.4-mini "summarize this repository"
+ai -m anthropic/claude-sonnet-4-5 --thinking high "think through this migration"
 ```
 
 Set a default model in `config.json`:
@@ -101,6 +104,30 @@ Set a default model in `config.json`:
 ```
 
 The legacy key `defaultModel` is also accepted.
+
+You can also define aliases for the names you actually want to type:
+
+```json
+{
+  "model": "fast",
+  "modelAliases": {
+    "fast": "github-copilot/gpt-5.4-mini",
+    "smart": {
+      "model": "anthropic/claude-sonnet-4-5",
+      "thinking": "high"
+    }
+  }
+}
+```
+
+Then use them from the CLI:
+
+```bash
+ai -m fast "quickly explain this error"
+ai -m smart "design a safer approach"
+```
+
+Valid thinking levels are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. You can also use the shorthand `model:thinking`, for example `ai -m smart:medium ...`.
 
 The config file lives at:
 

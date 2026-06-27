@@ -49,6 +49,92 @@ export function readConfig() {
   }
 }
 
+const VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+
+function isPlainObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateThinkingLevel(value, source) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const level = String(value);
+  if (!VALID_THINKING_LEVELS.has(level)) {
+    throw new Error(`Invalid thinking level ${JSON.stringify(level)} in ${source}. Valid values: ${Array.from(VALID_THINKING_LEVELS).join(", ")}`);
+  }
+  return level;
+}
+
+function getAliasMap(config) {
+  return {
+    ...(isPlainObject(config.aliases) ? config.aliases : {}),
+    ...(isPlainObject(config.modelAliases) ? config.modelAliases : {}),
+  };
+}
+
+function splitThinkingSuffix(spec) {
+  const value = String(spec);
+  const separatorIndex = value.lastIndexOf(":");
+  if (separatorIndex <= 0) return { modelSpec: value, thinkingLevel: undefined };
+
+  const suffix = value.slice(separatorIndex + 1);
+  if (!VALID_THINKING_LEVELS.has(suffix)) return { modelSpec: value, thinkingLevel: undefined };
+
+  return {
+    modelSpec: value.slice(0, separatorIndex),
+    thinkingLevel: suffix,
+  };
+}
+
+function resolveConfiguredModel(config, requestedModel, requestedThinkingLevel) {
+  const aliases = getAliasMap(config);
+  const seenAliases = new Set();
+  let thinkingLevel = validateThinkingLevel(config.thinking ?? config.defaultThinkingLevel, "config");
+  let thinkingPriority = 0;
+
+  const cliThinkingLevel = validateThinkingLevel(requestedThinkingLevel, "CLI --thinking");
+  if (cliThinkingLevel !== undefined) {
+    thinkingLevel = cliThinkingLevel;
+    thinkingPriority = 3;
+  }
+
+  function setThinking(nextLevel, priority, source) {
+    const validated = validateThinkingLevel(nextLevel, source);
+    if (validated !== undefined && thinkingPriority < priority) {
+      thinkingLevel = validated;
+      thinkingPriority = priority;
+    }
+  }
+
+  function resolveSpec(spec) {
+    if (spec === undefined || spec === null || spec === "") return undefined;
+
+    if (isPlainObject(spec)) {
+      setThinking(spec.thinking ?? spec.thinkingLevel, 1, "model config");
+      return resolveSpec(spec.model);
+    }
+
+    const { modelSpec, thinkingLevel: suffixThinkingLevel } = splitThinkingSuffix(spec);
+    setThinking(suffixThinkingLevel, 2, `model spec ${JSON.stringify(String(spec))}`);
+
+    const alias = aliases[modelSpec];
+    if (alias === undefined) return modelSpec;
+
+    if (seenAliases.has(modelSpec)) {
+      throw new Error(`Model alias cycle detected: ${Array.from(seenAliases).concat(modelSpec).join(" -> ")}`);
+    }
+
+    seenAliases.add(modelSpec);
+    const resolved = resolveSpec(alias);
+    seenAliases.delete(modelSpec);
+    return resolved;
+  }
+
+  return {
+    modelSpec: resolveSpec(requestedModel ?? config.model ?? config.defaultModel),
+    thinkingLevel,
+  };
+}
+
 function resolveModel(modelRegistry, spec) {
   if (!spec) return undefined;
 
@@ -79,15 +165,18 @@ CLI/runtime facts:
 - The direct CLI entry point is: ai prompt <ask llm>.
 - Shell wrappers may forward to the real binary with command ai prompt <ask llm>.
 - The CLI model flag (-m/--model) overrides the default model config for that invocation.
+- The CLI thinking flag (--thinking) overrides config or alias thinking for that invocation.
 - The shell integration helpers are available as: ai shell init <shell> and ai shell install <shell>.
 - The @b4fun/ai-cli config root is: ${configRoot}
 - The default model config file is: ${configPath}
 - The default model config JSON shape is: { "model": "provider/model-id" }. The legacy key { "defaultModel": "provider/model-id" } is also accepted.
+- Model aliases can be configured with { "modelAliases": { "fast": "provider/model-id", "smart": { "model": "provider/model-id", "thinking": "high" } } }.
 - Session logs for this shell are stored under: ${sessionDir}
 
 Operational guidance:
 - If the user asks to view, open, or edit ai settings/config/default model, use the paths above.
 - If the user asks to set or change the default model, update ${configPath}, creating the parent directory if needed.
+- If the user asks to add a model alias, update the modelAliases object in ${configPath}.
 - If the user asks to open settings/config in an editor or asks to run an interactive/full-screen terminal program, use the foreground tool so the program attaches to the user's terminal.
 - Use the normal bash tool for non-interactive commands whose output you need to inspect.
 - Use the foreground tool for interactive commands such as vim, nvim, less, top, ssh, REPLs, or anything that needs direct stdin/stdout/stderr. The foreground tool only returns the exit code to you.`;
@@ -167,7 +256,8 @@ function textFromToolResult(result) {
  *   sessionDir?: string,
  *   cwd?: string,
  *   model?: string,
- *   onModel?: (model: { provider: string, id: string }) => void,
+ *   thinkingLevel?: string,
+ *   onModel?: (model: { provider: string, id: string, thinkingLevel?: string }) => void,
  *   onToolStart?: (tool: { id: string, name: string, args: unknown }) => void,
  *   onToolOutput?: (tool: { id: string, name: string, chunk: string }) => void,
  *   onToolEnd?: (tool: { id: string, name: string, isError: boolean }) => void,
@@ -184,7 +274,7 @@ export async function ask(askLlm, options = {}) {
   const configPath = getConfigPath();
   const configRoot = getB4funAiHome();
   const config = readConfig();
-  const modelSpec = options.model ?? config.model ?? config.defaultModel;
+  const { modelSpec, thinkingLevel } = resolveConfiguredModel(config, options.model, options.thinkingLevel);
   const authStorage = AuthStorage.create();
   const modelRegistry = ModelRegistry.create(authStorage);
   const model = resolveModel(modelRegistry, modelSpec);
@@ -203,6 +293,7 @@ export async function ask(askLlm, options = {}) {
     authStorage,
     modelRegistry,
     model,
+    thinkingLevel,
     resourceLoader,
     customTools: [createForegroundTool(cwd)],
     tools: ["read", "bash", "edit", "write", "foreground"],
@@ -212,8 +303,12 @@ export async function ask(askLlm, options = {}) {
     sessionManager.appendModelChange(model.provider, model.id);
   }
 
+  if (thinkingLevel !== undefined && hadExistingSession) {
+    sessionManager.appendThinkingLevelChange(session.thinkingLevel);
+  }
+
   if (session.model) {
-    options.onModel?.({ provider: session.model.provider, id: session.model.id });
+    options.onModel?.({ provider: session.model.provider, id: session.model.id, thinkingLevel: session.thinkingLevel });
   }
 
   let response = "";
