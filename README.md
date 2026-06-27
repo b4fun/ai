@@ -97,15 +97,15 @@ command ai shell init bash --name ai
 
 On zsh, the installed wrapper uses `noglob`, so prompts like `??` can be passed through unquoted. The real binary is still available with `command ai ...`.
 
-## Experimental SEA build
+## SEA build
 
-There is an experimental build path for a standalone binary:
+There is a standalone binary build path:
 
 ```bash
 npm run build:sea
 ```
 
-This requires Node 25 or newer. It bundles the CLI as ESM for SEA, generates a SEA blob with the experimental warning disabled, copies the current Node executable, removes the original macOS signature when needed, injects the blob with the required `NODE_SEA` Mach-O segment, then re-signs the executable. The output lands in `dist/sea/ai` on Unix-like systems. Release builds currently use Node 25.
+This requires Node 25 or newer. It bundles the CLI as ESM for SEA, generates a SEA blob, copies the current Node executable, removes the original macOS signature when needed, injects the blob with the required `NODE_SEA` Mach-O segment, then re-signs the executable. The output lands in `dist/sea/ai` on Unix-like systems. Release builds currently use Node 25.
 
 GitHub Releases can build and upload compressed prebuilt binaries plus `.sha256` digest files automatically from `.github/workflows/release.yml` when a release is created or published.
 
