@@ -127,8 +127,16 @@ case "$download_path" in
 esac
 
 chmod 755 "$tmp_bin"
-cp "$tmp_bin" "$install_path"
-chmod 755 "$install_path"
+# Replace the executable with a fresh inode instead of overwriting in place.
+# On macOS, in-place replacement of an ad-hoc signed SEA binary can leave stale
+# assessment/provenance state behind and cause the upgraded binary to be killed
+# on launch. Installing via a temporary path and rename avoids that.
+tmp_install_path="$INSTALL_DIR/.ai.tmp.$$"
+rm -f "$tmp_install_path"
+cp "$tmp_bin" "$tmp_install_path"
+chmod 755 "$tmp_install_path"
+rm -f "$install_path"
+mv "$tmp_install_path" "$install_path"
 
 echo "Installed ai to $install_path"
 
