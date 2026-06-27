@@ -279,6 +279,20 @@ function formatCommand(args) {
   return typeof args?.command === "string" ? args.command : undefined;
 }
 
+async function readStdin() {
+  if (process.stdin.isTTY) return "";
+
+  process.stdin.setEncoding("utf8");
+  return await new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.on("data", (chunk) => {
+      data += chunk;
+    });
+    process.stdin.on("end", () => resolve(data));
+    process.stdin.on("error", reject);
+  });
+}
+
 async function runPrompt(askLlm, model) {
   const spinner = startSpinner();
   let wroteAssistantText = false;
@@ -417,4 +431,9 @@ if (!askLlm) {
   process.exit(1);
 }
 
-await runPrompt(askLlm, parsed.model);
+const stdinText = await readStdin();
+const combinedPrompt = stdinText.trim()
+  ? `${askLlm}\n\nAdditional context from stdin:\n\n\`\`\`\n${stdinText.trimEnd()}\n\`\`\``
+  : askLlm;
+
+await runPrompt(combinedPrompt, parsed.model);

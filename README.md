@@ -35,6 +35,12 @@ ai "What files are in this directory?"
 ai -m anthropic/claude-sonnet-4-5 "Explain this project"
 ```
 
+You can also pipe stdin into the prompt as extra context:
+
+```bash
+another-command | ai check what is going on
+```
+
 You can also use a model from config:
 
 ```json
