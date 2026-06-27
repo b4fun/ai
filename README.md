@@ -67,6 +67,27 @@ command ai upgrade v0.1.0-alpha.7
 
 The upgrade helper reinstalls into the current binary's directory and skips shell integration changes.
 
+## Auth
+
+`ai` uses the same pi credentials. If credentials are missing or a provider rejects them, the CLI can prompt you to log in and retry.
+
+Log in explicitly:
+
+```bash
+command ai auth login
+command ai auth login github-copilot
+command ai auth login anthropic
+```
+
+Check configured auth:
+
+```bash
+command ai auth status
+command ai auth status github-copilot
+```
+
+OAuth providers open the browser or show a device code. API-key providers prompt for a key and save it to pi's `auth.json`.
+
 ## Usage
 
 The direct CLI entry point is `ai prompt`:
@@ -78,6 +99,7 @@ command ai -m anthropic/claude-sonnet-4-5 prompt Explain this project
 command ai -m smart --thinking high prompt Plan this refactor
 command ai version
 command ai --version
+command ai auth login github-copilot
 command ai upgrade
 ```
 
@@ -179,7 +201,7 @@ command ai shell install bash --name ai
 command ai shell install fish --name ai
 ```
 
-On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The real binary remains available with `command ai ...`.
+On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. Shell wrappers pass through management commands such as `ai auth`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
 
 ## Sessions
 

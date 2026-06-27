@@ -171,6 +171,13 @@ function getRcPath(shellName) {
 function createCommonWrapperBody(commandName) {
   const quotedCommand = shellSingleQuote(commandName);
   return [
+    "  case \"${1-}\" in",
+    "    auth|upgrade|version|shell)",
+    `      command ${quotedCommand} \"$@\"`,
+    "      return $?",
+    "      ;;",
+    "  esac",
+    "",
     "  local model=",
     "  local thinking=",
     "  while [ $# -gt 0 ]; do",
@@ -244,6 +251,12 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
   if (shell === "fish") {
     return [
       `function ${sanitizeIdentifier(wrapperName)}`,
+      "    switch $argv[1]",
+      "        case auth upgrade version shell",
+      `            command ${shellSingleQuote(commandName)} $argv`,
+      "            return $status",
+      "    end",
+      "",
       "    set -l model",
       "    set -l thinking",
       "    while test (count $argv) -gt 0",
@@ -425,58 +438,97 @@ async function readStdin() {
 
 async function runPrompt(askLlm, model, thinkingLevel) {
   const { ask } = await import("../src/index.js");
-  const spinner = startSpinner();
-  let wroteAssistantText = false;
-  let wroteToolOutput = false;
+  const { confirmLoginAfterAuthError } = await import("../src/auth.js");
+  let activeProvider;
+  let attemptedLoginRetry = false;
+
+  const runOnce = async () => {
+    const spinner = startSpinner();
+    let wroteAssistantText = false;
+    let wroteToolOutput = false;
+
+    try {
+      await ask(askLlm, {
+        model,
+        thinkingLevel,
+        onModel: ({ provider, id, thinkingLevel: activeThinkingLevel }) => {
+          activeProvider = provider;
+          const thinkingLabel = activeThinkingLevel ? `, thinking ${activeThinkingLevel}` : "";
+          spinner.setLabel(`Waiting for LLM (${provider}/${id}${thinkingLabel})`);
+        },
+        write: (chunk) => {
+          spinner.pause();
+          if (wroteToolOutput && !wroteAssistantText) process.stderr.write("\n");
+          wroteAssistantText = true;
+          process.stdout.write(chunk);
+          if (chunk.endsWith("\n")) spinner.resume();
+        },
+        onToolStart: ({ name, args }) => {
+          if (name !== "bash" && name !== "foreground") return;
+          spinner.pause();
+          const command = formatCommand(args);
+          process.stderr.write(`\n$ ${command ?? name}\n`);
+          spinner.resume();
+          wroteToolOutput = true;
+        },
+        onToolOutput: ({ name, chunk }) => {
+          if (name !== "bash") return;
+          spinner.pause();
+          process.stderr.write(chunk);
+          if (chunk.endsWith("\n")) spinner.resume();
+          wroteToolOutput = true;
+        },
+        onToolEnd: ({ name, isError }) => {
+          if (name !== "bash" && name !== "foreground") return;
+          spinner.pause();
+          if (isError) process.stderr.write("\n[command failed]\n");
+          spinner.resume();
+        },
+      });
+      spinner.stop();
+      process.stdout.write("\n");
+    } catch (error) {
+      spinner.stop();
+      throw error;
+    }
+  };
 
   try {
-    await ask(askLlm, {
-      model,
-      thinkingLevel,
-      onModel: ({ provider, id, thinkingLevel: activeThinkingLevel }) => {
-        const thinkingLabel = activeThinkingLevel ? `, thinking ${activeThinkingLevel}` : "";
-        spinner.setLabel(`Waiting for LLM (${provider}/${id}${thinkingLabel})`);
-      },
-      write: (chunk) => {
-        spinner.pause();
-        if (wroteToolOutput && !wroteAssistantText) process.stderr.write("\n");
-        wroteAssistantText = true;
-        process.stdout.write(chunk);
-        if (chunk.endsWith("\n")) spinner.resume();
-      },
-      onToolStart: ({ name, args }) => {
-        if (name !== "bash" && name !== "foreground") return;
-        spinner.pause();
-        const command = formatCommand(args);
-        process.stderr.write(`\n$ ${command ?? name}\n`);
-        spinner.resume();
-        wroteToolOutput = true;
-      },
-      onToolOutput: ({ name, chunk }) => {
-        if (name !== "bash") return;
-        spinner.pause();
-        process.stderr.write(chunk);
-        if (chunk.endsWith("\n")) spinner.resume();
-        wroteToolOutput = true;
-      },
-      onToolEnd: ({ name, isError }) => {
-        if (name !== "bash" && name !== "foreground") return;
-        spinner.pause();
-        if (isError) process.stderr.write("\n[command failed]\n");
-        spinner.resume();
-      },
-    });
-    spinner.stop();
-    process.stdout.write("\n");
+    await runOnce();
   } catch (error) {
-    spinner.stop();
+    if (!attemptedLoginRetry && await confirmLoginAfterAuthError(activeProvider, error)) {
+      attemptedLoginRetry = true;
+      await runOnce();
+      return;
+    }
+
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }
 
+async function runAuth(argv) {
+  const action = argv[0];
+  const provider = argv[1];
+
+  if (action !== "login" && action !== "status") {
+    throw new Error(`Unknown auth command: ${action || "(missing)"}`);
+  }
+
+  if (argv.length > 2) {
+    throw new Error(`Unexpected auth arguments: ${argv.slice(2).join(" ")}`);
+  }
+
+  const { loginProvider, printAuthStatus } = await import("../src/auth.js");
+  if (action === "login") {
+    await loginProvider(provider);
+  } else {
+    printAuthStatus(provider);
+  }
+}
+
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | version | upgrade [version] | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
@@ -496,6 +548,10 @@ function parseCli(argv) {
 
   if (rest[0] === "upgrade") {
     return { mode: "upgrade", model, thinkingLevel, argv: rest.slice(1) };
+  }
+
+  if (rest[0] === "auth") {
+    return { mode: "auth", model, thinkingLevel, argv: rest.slice(1) };
   }
 
   if (rest[0] === "prompt") {
@@ -570,6 +626,22 @@ async function main() {
       return;
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  if (parsed.mode === "auth") {
+    if (parsed.model || parsed.thinkingLevel) {
+      console.error("The model and thinking flags are only supported in prompt mode.");
+      process.exit(1);
+    }
+
+    try {
+      await runAuth(parsed.argv);
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      printUsage();
       process.exit(1);
     }
   }
