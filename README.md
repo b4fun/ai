@@ -1,18 +1,28 @@
 # @b4fun/ai-cli
 
-A small Node.js CLI wrapper around `@earendil-works/pi-coding-agent`.
+A small Node.js CLI wrapper around [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
 
-## What it does
+`@b4fun/ai-cli` gives you a short `ai` command for asking a coding agent questions from your terminal, while preserving pi's file, shell, and edit tools.
 
-- runs prompts through the pi coding agent
-- streams assistant output to your terminal
-- mirrors command output from tools like `bash`
-- exposes a `foreground` tool for interactive programs like `vim`
-- keeps per-shell sessions and a default model config
+## Why
+
+Sometimes the nicest coding-agent UI is just the shell you already have open. Ask a question, let the agent look around, run a command, edit a file, or jump into an interactive tool when that is the easiest path.
+
+Smart base models can usually follow a few local rules and knock out focused tasks without much ceremony. Keeping everything close to the terminal makes `ai` handy for ad hoc work: quick fixes, repo spelunking, debugging, tiny automations, and other exploratory tasks where a heavier workflow would be overkill.
+
+## Features
+
+- Runs prompts through the pi coding agent
+- Streams assistant responses as they are generated
+- Mirrors `bash` tool output to your terminal
+- Adds a `foreground` tool for interactive programs such as `vim`, `less`, `top`, and REPLs
+- Persists sessions per shell, with an optional stable `AI_SESSION_ID`
+- Supports a default model config plus per-command `-m/--model` overrides
+- Installs optional shell wrappers for zsh, bash, and fish
 
 ## Install
 
-Install a prebuilt binary for the current platform and add shell integration:
+Install the latest prebuilt binary for your platform and add shell integration:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh
@@ -21,13 +31,18 @@ curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.0-alpha.3
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.0-alpha.5
 ```
 
-Customize the shell wrapper name or skip shell integration:
+Customize the shell wrapper name:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | AI_SHELL_NAME=a sh
+```
+
+Skip shell integration:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | AI_INSTALL_SHELL=0 sh
 ```
 
@@ -49,7 +64,7 @@ command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
 command ai version
 ```
 
-If you install the shell wrapper, you can keep using the shorter form:
+If you install the shell wrapper, you can use the shorter form:
 
 ```bash
 ai "Say hello"
@@ -57,19 +72,35 @@ ai "What files are in this directory?"
 ai -m anthropic/claude-sonnet-4-5 "Explain this project"
 ```
 
-You can also pipe stdin into the prompt as extra context:
+Pipe stdin to include it as extra prompt context:
 
 ```bash
-another-command | ai check what is going on
+another-command | ai "check what is going on"
 ```
 
-You can also use a model from config:
+For interactive terminal programs, ask the agent to use the `foreground` tool:
+
+```bash
+ai "use the foreground tool to run vim README.md"
+```
+
+## Models and config
+
+Use `-m` or `--model` to override the model for one invocation:
+
+```bash
+ai -m github-copilot/gpt-5.4-mini "summarize this repository"
+```
+
+Set a default model in `config.json`:
 
 ```json
 {
   "model": "github-copilot/gpt-5.4-mini"
 }
 ```
+
+The legacy key `defaultModel` is also accepted.
 
 The config file lives at:
 
@@ -91,43 +122,31 @@ Generate shell setup for a wrapper name of your choice:
 
 ```bash
 command ai shell init zsh --name a
-command ai shell install zsh --name a
 command ai shell init bash --name ai
+command ai shell init fish --name ai
 ```
 
-On zsh, the installed wrapper uses `noglob`, so prompts like `??` can be passed through unquoted. The real binary is still available with `command ai ...`.
-
-## SEA build
-
-There is a standalone binary build path:
+Install shell setup into your rc file:
 
 ```bash
-npm run build:sea
+command ai shell install zsh --name a
+command ai shell install bash --name ai
+command ai shell install fish --name ai
 ```
 
-This requires Node 25 or newer. It bundles the CLI as ESM for SEA, generates a SEA blob, copies the current Node executable, removes the original macOS signature when needed, injects the blob with the required `NODE_SEA` Mach-O segment, then re-signs the executable. The output lands in `dist/sea/ai` on Unix-like systems. Release builds currently use Node 25.
-
-GitHub Releases can build and upload compressed prebuilt binaries plus `.sha256` digest files automatically from `.github/workflows/release.yml` when a release is created or published.
-
-## Interactive tools
-
-If you want to run an interactive terminal app, ask for the `foreground` tool:
-
-```bash
-ai "use the foreground tool to run vim"
-```
+On zsh, the installed wrapper uses `noglob`, so prompts like `??` can be passed through unquoted. The real binary remains available with `command ai ...`.
 
 ## Sessions
 
-Sessions are stored under:
+Sessions are stored under the same `@b4fun-ai` config root:
 
 ```text
-$XDG_HOME/@b4fun-ai
+$XDG_HOME/@b4fun-ai/sessions
 ```
 
-or the same fallback paths listed above.
+or one of the fallback roots listed above.
 
-To reuse a stable session across shells, set:
+By default, sessions are grouped by parent shell process. To reuse a stable session across shells, set:
 
 ```bash
 export AI_SESSION_ID=my-session
@@ -143,3 +162,19 @@ const answer = await ask("Say hello", {
   write: (chunk) => process.stdout.write(chunk),
 });
 ```
+
+## Build a standalone binary
+
+There is a standalone executable build path based on Node SEA:
+
+```bash
+npm run build:sea
+```
+
+This requires Node 25 or newer. It bundles the CLI as ESM, generates a SEA blob, copies the current Node executable, injects the blob, and re-signs the executable when needed on macOS. The output lands in:
+
+```text
+dist/sea/ai
+```
+
+Release builds are produced by `.github/workflows/release.yml` and uploaded as compressed prebuilt binaries with `.sha256` digest files.
