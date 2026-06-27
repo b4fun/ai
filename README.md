@@ -72,10 +72,10 @@ The upgrade helper reinstalls into the current binary's directory and skips shel
 The direct CLI entry point is `ai prompt`:
 
 ```bash
-command ai prompt "Say hello"
-command ai prompt "What files are in this directory?"
-command ai -m anthropic/claude-sonnet-4-5 prompt "Explain this project"
-command ai -m smart --thinking high prompt "Plan this refactor"
+command ai prompt Say hello
+command ai prompt What files are in this directory?
+command ai -m anthropic/claude-sonnet-4-5 prompt Explain this project
+command ai -m smart --thinking high prompt Plan this refactor
 command ai version
 command ai --version
 command ai upgrade
@@ -84,22 +84,24 @@ command ai upgrade
 If you install the shell wrapper, you can use the shorter form:
 
 ```bash
-ai "Say hello"
-ai "What files are in this directory?"
-ai -m anthropic/claude-sonnet-4-5 "Explain this project"
-ai -m smart --thinking high "Plan this refactor"
+ai Say hello
+ai What files are in this directory?
+ai -m anthropic/claude-sonnet-4-5 Explain this project
+ai -m smart --thinking high Plan this refactor
 ```
+
+The CLI joins the remaining arguments into the prompt, so quotes are optional for most plain-language prompts. In zsh, the installed wrapper is also a `noglob` alias, which means prompts containing glob-looking text like `??`, `*`, or `[abc]` can usually be passed unquoted too. Use quotes when you need normal shell quoting behavior, such as preserving extra whitespace, pipes, redirects, variables, or other shell syntax as literal text.
 
 Pipe stdin to include it as extra prompt context:
 
 ```bash
-another-command | ai "check what is going on"
+another-command | ai check what is going on
 ```
 
 For interactive terminal programs, ask the agent to use the `foreground` tool:
 
 ```bash
-ai "use the foreground tool to run vim README.md"
+ai use the foreground tool to run vim README.md
 ```
 
 ## Models and config
@@ -107,8 +109,8 @@ ai "use the foreground tool to run vim README.md"
 Use `-m` or `--model` to override the model for one invocation. Use `--thinking` to override the thinking level:
 
 ```bash
-ai -m github-copilot/gpt-5.4-mini "summarize this repository"
-ai -m anthropic/claude-sonnet-4-5 --thinking high "think through this migration"
+ai -m github-copilot/gpt-5.4-mini summarize this repository
+ai -m anthropic/claude-sonnet-4-5 --thinking high think through this migration
 ```
 
 Set a default model in `config.json`:
@@ -139,8 +141,8 @@ You can also define aliases for the names you actually want to type:
 Then use them from the CLI:
 
 ```bash
-ai -m fast "quickly explain this error"
-ai -m smart "design a safer approach"
+ai -m fast quickly explain this error
+ai -m smart design a safer approach
 ```
 
 Valid thinking levels are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. You can also use the shorthand `model:thinking`, for example `ai -m smart:medium ...`.
@@ -177,7 +179,7 @@ command ai shell install bash --name ai
 command ai shell install fish --name ai
 ```
 
-On zsh, the installed wrapper uses `noglob`, so prompts like `??` can be passed through unquoted. The real binary remains available with `command ai ...`.
+On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The real binary remains available with `command ai ...`.
 
 ## Sessions
 
