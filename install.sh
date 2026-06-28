@@ -92,11 +92,9 @@ else
   echo "No sha256 digest found; skipping digest verification" >&2
 fi
 
-tmp_package_dir=""
 case "$download_path" in
   *.tar.gz)
     tar -xzf "$download_path" -C "$TMP_DIR"
-    tmp_package_dir="$TMP_DIR"
     tmp_bin="$TMP_DIR/ai"
     ;;
   *)
@@ -105,28 +103,6 @@ case "$download_path" in
 esac
 
 chmod 755 "$tmp_bin"
-
-# Linux release archives may include hidden runtime payload files next to the
-# public `ai` launcher. Install those first so the final launcher rename is the
-# only visible switch to the new version.
-if [ -n "$tmp_package_dir" ] && [ -f "$tmp_package_dir/.ai-real" ]; then
-  tmp_real_path="$INSTALL_DIR/.ai-real.tmp.$$"
-  rm -f "$tmp_real_path"
-  cp "$tmp_package_dir/.ai-real" "$tmp_real_path"
-  chmod 755 "$tmp_real_path"
-  rm -f "$INSTALL_DIR/.ai-real"
-  mv "$tmp_real_path" "$INSTALL_DIR/.ai-real"
-fi
-
-if [ -n "$tmp_package_dir" ] && [ -d "$tmp_package_dir/.ai-lib" ]; then
-  tmp_lib_path="$INSTALL_DIR/.ai-lib.tmp.$$"
-  rm -rf "$tmp_lib_path"
-  mkdir -p "$tmp_lib_path"
-  cp -R "$tmp_package_dir/.ai-lib/." "$tmp_lib_path/"
-  rm -rf "$INSTALL_DIR/.ai-lib"
-  mv "$tmp_lib_path" "$INSTALL_DIR/.ai-lib"
-fi
-
 # Replace the executable with a fresh inode instead of overwriting in place.
 # On macOS, in-place replacement of an ad-hoc signed SEA binary can leave stale
 # assessment/provenance state behind and cause the upgraded binary to be killed
