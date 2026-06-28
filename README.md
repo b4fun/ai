@@ -1,10 +1,30 @@
-# @b4fun/ai-cli
+# @b4fun/ai
 
-[Pi](https://pi.dev) in your shell.
+<table>
+  <tr>
+    <td width="56%" valign="top">
+      <img src="docs/demos/minimal.gif" alt="Demo of @b4fun/ai answering a prompt from the terminal" width="100%">
+    </td>
+    <td width="44%" valign="top">
 
-<p align="center">
-  <img src="docs/demos/minimal.gif" alt="Demo of @b4fun/ai-cli answering a prompt from the terminal" width="800">
-</p>
+```text
+b4fun@ai-cli
+------------
+About:    Pi in your shell
+Command:  ai prompt <ask llm>
+Shortcut: ai <ask llm>
+Models:   provider/model-id
+Profiles: ai -P <name>
+Shells:   zsh, bash, fish
+Config:   ai config get
+Docs:     docs/README.md
+```
+
+[Pi](https://pi.dev) in your shell, packaged as a small terminal-first assistant.
+
+    </td>
+  </tr>
+</table>
 
 ## Install
 
