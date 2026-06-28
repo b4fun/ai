@@ -3,12 +3,13 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getShellSessionDir, readConfig } from "../src/config.js";
+import { clearShellProfileFork, getShellSessionDir, readConfig, readShellProfileState, writeShellProfile } from "../src/config.js";
 import { VERSION } from "../src/version.js";
 
 function parseGlobalOptions(argv) {
   let model;
   let thinkingLevel;
+  let profile;
   const rest = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -16,7 +17,7 @@ function parseGlobalOptions(argv) {
 
     if (arg === "--") {
       rest.push(...argv.slice(index + 1));
-      return { model, thinkingLevel, rest };
+      return { model, thinkingLevel, profile, rest };
     }
 
     if (arg === "-m" || arg === "--model") {
@@ -45,11 +46,24 @@ function parseGlobalOptions(argv) {
       continue;
     }
 
+    if (arg === "-P" || arg === "--profile") {
+      profile = argv[index + 1];
+      if (!profile) throw new Error(`${arg} requires a profile name`);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--profile=")) {
+      profile = arg.slice("--profile=".length);
+      if (!profile) throw new Error("--profile requires a profile name");
+      continue;
+    }
+
     rest.push(...argv.slice(index));
-    return { model, thinkingLevel, rest };
+    return { model, thinkingLevel, profile, rest };
   }
 
-  return { model, thinkingLevel, rest };
+  return { model, thinkingLevel, profile, rest };
 }
 
 function parseShellCommand(argv) {
@@ -181,6 +195,7 @@ function createCommonWrapperBody(commandName) {
     "",
     "  local model=",
     "  local thinking=",
+    "  local profile=",
     "  while [ $# -gt 0 ]; do",
     "    case \"$1\" in",
     "      -m|--model)",
@@ -207,6 +222,18 @@ function createCommonWrapperBody(commandName) {
     '        thinking=${1#--thinking=}',
     "        shift",
     "        ;;",
+    "      -P|--profile)",
+    "        if [ $# -lt 2 ]; then",
+    "          printf '%s\\n' \"$1 requires a profile name\" >&2",
+    "          return 1",
+    "        fi",
+    "        profile=$2",
+    "        shift 2",
+    "        ;;",
+    '      --profile=*)',
+    '        profile=${1#--profile=}',
+    "        shift",
+    "        ;;",
     "      --)",
     "        shift",
     "        break",
@@ -220,6 +247,9 @@ function createCommonWrapperBody(commandName) {
     "  set -- prompt \"$@\"",
     "  if [ -n \"$thinking\" ]; then",
     "    set -- --thinking \"$thinking\" \"$@\"",
+    "  fi",
+    "  if [ -n \"$profile\" ]; then",
+    "    set -- --profile \"$profile\" \"$@\"",
     "  fi",
     "  if [ -n \"$model\" ]; then",
     "    set -- -m \"$model\" \"$@\"",
@@ -430,6 +460,7 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
       "",
       "    set -l model",
       "    set -l thinking",
+      "    set -l profile",
       "    while test (count $argv) -gt 0",
       "        switch $argv[1]",
       "            case -m --model",
@@ -452,6 +483,16 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
       "            case --thinking=*",
       "                set thinking (string split -m1 '=' -- $argv[1])[2]",
       "                set argv $argv[2..-1]",
+      "            case -P --profile",
+      "                if test (count $argv) -lt 2",
+      "                    printf '%s\\n' \"$argv[1] requires a profile name\" >&2",
+      "                    return 1",
+      "                end",
+      "                set profile $argv[2]",
+      "                set argv $argv[3..-1]",
+      "            case --profile=*",
+      "                set profile (string split -m1 '=' -- $argv[1])[2]",
+      "                set argv $argv[2..-1]",
       "            case --",
       "                set argv $argv[2..-1]",
       "                break",
@@ -463,6 +504,9 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
       "    set -l ai_args prompt $argv",
       "    if test -n \"$thinking\"",
       "        set ai_args --thinking \"$thinking\" $ai_args",
+      "    end",
+      "    if test -n \"$profile\"",
+      "        set ai_args --profile \"$profile\" $ai_args",
       "    end",
       "    if test -n \"$model\"",
       "        set ai_args -m \"$model\" $ai_args",
@@ -661,7 +705,7 @@ async function readStdin() {
   });
 }
 
-async function runPrompt(askLlm, model, thinkingLevel) {
+async function runPrompt(askLlm, model, thinkingLevel, profile, forkSession) {
   const { ask } = await import("../src/index.js");
   const { confirmLoginAfterAuthError } = await import("../src/auth.js");
   let activeProvider;
@@ -677,6 +721,8 @@ async function runPrompt(askLlm, model, thinkingLevel) {
       await ask(askLlm, {
         model,
         thinkingLevel,
+        profile,
+        forkSession,
         onModel: ({ provider, id, thinkingLevel: activeThinkingLevel }) => {
           activeProvider = provider;
           const thinkingLabel = activeThinkingLevel ? `, thinking ${activeThinkingLevel}` : "";
@@ -737,7 +783,7 @@ async function runPrompt(askLlm, model, thinkingLevel) {
   }
 }
 
-async function runPi(argv, model, thinkingLevel) {
+async function runPi(argv, model, thinkingLevel, profileName) {
   if (argv.length > 0) {
     throw new Error(`Unexpected pi arguments: ${argv.join(" ")}`);
   }
@@ -746,11 +792,18 @@ async function runPi(argv, model, thinkingLevel) {
     throw new Error("Starting pi requires an interactive terminal.");
   }
 
+  const config = readConfig();
   const { resolveConfiguredModel } = await import("../src/model-config.js");
-  const resolved = resolveConfiguredModel(readConfig(), model, thinkingLevel);
+  const { getProfileAppendSystemPrompt, getProfileTools, resolveProfile } = await import("../src/profiles.js");
+  const { profile } = resolveProfile(config, profileName);
+  const resolved = resolveConfiguredModel(config, model ?? profile.model, thinkingLevel ?? profile.thinking);
+  const appendSystemPrompt = getProfileAppendSystemPrompt(profile);
+  const tools = getProfileTools(profile);
   const args = ["--session-dir", getShellSessionDir(), "--continue"];
   if (resolved.modelSpec) args.push("--model", resolved.modelSpec);
   if (resolved.thinkingLevel) args.push("--thinking", resolved.thinkingLevel);
+  for (const item of appendSystemPrompt) args.push("--append-system-prompt", item);
+  if (tools) args.push("--tools", tools.join(","));
 
   const result = spawnSync("pi", args, {
     stdio: "inherit",
@@ -764,6 +817,14 @@ async function runPi(argv, model, thinkingLevel) {
   if (result.status !== 0) {
     throw new Error(`pi exited with code ${result.status ?? 1}`);
   }
+}
+
+async function activateProfile(profile, { quiet = false, forkSession = false } = {}) {
+  const { resolveProfile } = await import("../src/profiles.js");
+  const { name } = resolveProfile(readConfig(), profile);
+  writeShellProfile(name, { forkSession });
+  if (!quiet) console.log(`Active profile for this shell session: ${name}`);
+  return name;
 }
 
 async function runAuth(argv) {
@@ -787,41 +848,41 @@ async function runAuth(argv) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [--thinking <level>] [prompt <ask llm> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [-P|--profile <name>] [prompt <ask llm> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
   if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v")) {
-    return { mode: "version", model: undefined, thinkingLevel: undefined };
+    return { mode: "version", model: undefined, thinkingLevel: undefined, profile: undefined };
   }
 
-  const { model, thinkingLevel, rest } = parseGlobalOptions(argv);
+  const { model, thinkingLevel, profile, rest } = parseGlobalOptions(argv);
 
   if (rest[0] === "shell" && (rest[1] === "init" || rest[1] === "install")) {
-    return { mode: "shell", model, thinkingLevel, argv: rest.slice(1) };
+    return { mode: "shell", model, thinkingLevel, profile, argv: rest.slice(1) };
   }
 
   if (rest[0] === "version") {
-    return { mode: "version", model, thinkingLevel };
+    return { mode: "version", model, thinkingLevel, profile };
   }
 
   if (rest[0] === "upgrade") {
-    return { mode: "upgrade", model, thinkingLevel, argv: rest.slice(1) };
+    return { mode: "upgrade", model, thinkingLevel, profile, argv: rest.slice(1) };
   }
 
   if (rest[0] === "auth") {
-    return { mode: "auth", model, thinkingLevel, argv: rest.slice(1) };
+    return { mode: "auth", model, thinkingLevel, profile, argv: rest.slice(1) };
   }
 
   if (rest[0] === "pi") {
-    return { mode: "pi", model, thinkingLevel, argv: rest.slice(1) };
+    return { mode: "pi", model, thinkingLevel, profile, argv: rest.slice(1) };
   }
 
   if (rest[0] === "prompt") {
-    return { mode: "prompt", model, thinkingLevel, promptParts: rest.slice(1) };
+    return { mode: "prompt", model, thinkingLevel, profile, promptParts: rest.slice(1) };
   }
 
-  return { mode: "prompt", model, thinkingLevel, promptParts: rest };
+  return { mode: "prompt", model, thinkingLevel, profile, promptParts: rest };
 }
 
 function resolvePromptText(promptParts) {
@@ -864,8 +925,8 @@ async function main() {
   }
 
   if (parsed.mode === "version") {
-    if (parsed.model || parsed.thinkingLevel) {
-      console.error("The model and thinking flags are only supported in prompt mode.");
+    if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+      console.error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
       process.exit(1);
     }
     console.log(VERSION);
@@ -873,8 +934,8 @@ async function main() {
   }
 
   if (parsed.mode === "upgrade") {
-    if (parsed.model || parsed.thinkingLevel) {
-      console.error("The model and thinking flags are only supported in prompt mode.");
+    if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+      console.error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
       process.exit(1);
     }
 
@@ -895,7 +956,7 @@ async function main() {
 
   if (parsed.mode === "pi") {
     try {
-      await runPi(parsed.argv, parsed.model, parsed.thinkingLevel);
+      await runPi(parsed.argv, parsed.model, parsed.thinkingLevel, parsed.profile);
       return;
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
@@ -905,8 +966,8 @@ async function main() {
   }
 
   if (parsed.mode === "auth") {
-    if (parsed.model || parsed.thinkingLevel) {
-      console.error("The model and thinking flags are only supported in prompt mode.");
+    if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+      console.error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
       process.exit(1);
     }
 
@@ -925,8 +986,8 @@ async function main() {
     const action = shellCommand.action;
 
     try {
-      if (parsed.model || parsed.thinkingLevel) {
-        throw new Error("The model and thinking flags are only supported in prompt mode.");
+      if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+        throw new Error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
       }
 
       if (action !== "init" && action !== "install") {
@@ -953,17 +1014,24 @@ async function main() {
   }
 
   const askLlm = resolvePromptText(parsed.promptParts);
-  if (!askLlm) {
-    printUsage();
-    process.exit(1);
+  const stdinText = await readStdin();
+  const hasPrompt = !!askLlm || !!stdinText.trim();
+  const shellProfileState = readShellProfileState();
+
+  if (parsed.profile) {
+    await activateProfile(parsed.profile, { quiet: hasPrompt, forkSession: true });
   }
 
-  const stdinText = await readStdin();
+  if (!hasPrompt && parsed.profile) return;
+
+  const effectiveProfile = parsed.profile ?? shellProfileState.profile;
+  const shouldForkSession = !!parsed.profile || shellProfileState.forkSession;
   const combinedPrompt = stdinText.trim()
     ? `${askLlm}\n\nAdditional context from stdin:\n\n\`\`\`\n${stdinText.trimEnd()}\n\`\`\``
     : askLlm;
 
-  await runPrompt(combinedPrompt, parsed.model, parsed.thinkingLevel);
+  await runPrompt(combinedPrompt, parsed.model, parsed.thinkingLevel, effectiveProfile, shouldForkSession);
+  if (shouldForkSession) clearShellProfileFork();
 }
 
 main().catch((error) => {

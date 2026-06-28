@@ -23,6 +23,46 @@ export function getShellSessionDir() {
   return path.join(getB4funAiHome(), "sessions", `shell-${safeSessionName(shellId)}`);
 }
 
+export function getShellProfilePath(sessionDir = getShellSessionDir()) {
+  return path.join(sessionDir, "active-profile.json");
+}
+
+export function readShellProfileState(sessionDir = getShellSessionDir()) {
+  const profilePath = getShellProfilePath(sessionDir);
+  if (!fs.existsSync(profilePath)) return {};
+
+  try {
+    const data = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+    return {
+      profile: typeof data.profile === "string" && data.profile ? data.profile : undefined,
+      forkSession: data.forkSession === true,
+    };
+  } catch {
+    return {};
+  }
+}
+
+export function readShellProfile(sessionDir = getShellSessionDir()) {
+  return readShellProfileState(sessionDir).profile;
+}
+
+export function writeShellProfile(profile, optionsOrSessionDir = {}, maybeSessionDir) {
+  const options = typeof optionsOrSessionDir === "string" ? {} : optionsOrSessionDir;
+  const sessionDir = typeof optionsOrSessionDir === "string" ? optionsOrSessionDir : (maybeSessionDir ?? getShellSessionDir());
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(
+    getShellProfilePath(sessionDir),
+    `${JSON.stringify({ profile, forkSession: options.forkSession === true }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+export function clearShellProfileFork(sessionDir = getShellSessionDir()) {
+  const state = readShellProfileState(sessionDir);
+  if (!state.profile) return;
+  writeShellProfile(state.profile, { forkSession: false }, sessionDir);
+}
+
 export function getConfigPath() {
   return path.join(getB4funAiHome(), "config.json");
 }

@@ -24,7 +24,7 @@ test("rejects prompt-only flags for upgrade command", () => {
   });
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /model and thinking flags are only supported in prompt mode/i);
+  assert.match(result.stderr, /model, thinking, and profile flags are only supported in prompt and pi modes/i);
 });
 
 test("pi command requires an interactive terminal", () => {
@@ -42,8 +42,11 @@ test("bash shell wrapper forwards model and thinking flags", () => {
   assert.match(snippet, /auth\|pi\|upgrade\|version\|shell/);
   assert.match(snippet, /local model=/);
   assert.match(snippet, /local thinking=/);
+  assert.match(snippet, /local profile=/);
   assert.match(snippet, /--thinking\)/);
+  assert.match(snippet, /--profile\)/);
   assert.match(snippet, /set -- --thinking "\$thinking" "\$@"/);
+  assert.match(snippet, /set -- --profile "\$profile" "\$@"/);
   assert.match(snippet, /set -- -m "\$model" "\$@"/);
 });
 
@@ -61,7 +64,9 @@ test("fish shell wrapper forwards model and thinking flags", () => {
   assert.match(snippet, /case auth pi upgrade version shell/);
   assert.match(snippet, /set -l model/);
   assert.match(snippet, /set -l thinking/);
+  assert.match(snippet, /set -l profile/);
   assert.match(snippet, /case --thinking/);
+  assert.match(snippet, /case -P --profile/);
   assert.match(snippet, /_escape_apostrophes/);
   assert.match(snippet, /bind \\r .*_accept_line/);
   assert.match(snippet, /set ai_args --thinking "\$thinking" \$ai_args/);
