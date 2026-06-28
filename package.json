@@ -1,6 +1,6 @@
 {
   "name": "@b4fun/ai-cli",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0",
   "description": "Pi in your shell.",
   "type": "module",
   "bin": {
