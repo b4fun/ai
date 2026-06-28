@@ -1,11 +1,6 @@
 # @b4fun/ai
 
-<table>
-  <tr>
-    <td width="56%" valign="top">
-      <img src="docs/demos/minimal.gif" alt="Demo of @b4fun/ai answering a prompt from the terminal" width="100%">
-    </td>
-    <td width="44%" valign="top">
+<img align="right" src="docs/demos/minimal.gif" alt="Demo of @b4fun/ai answering a prompt from the terminal" width="460">
 
 ```text
 b4fun@ai-cli
@@ -22,9 +17,7 @@ Docs:     docs/README.md
 
 [Pi](https://pi.dev) in your shell, packaged as a small terminal-first assistant.
 
-    </td>
-  </tr>
-</table>
+<br clear="right">
 
 ## Install
 
