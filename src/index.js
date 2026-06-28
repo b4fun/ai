@@ -73,6 +73,7 @@ ${profileLine}- Enabled tools for this invocation: ${availableTools}
 - The shell integration helpers are available as: ai shell init <shell> and ai shell install <shell>.
 - The pi handoff helper is available as: ai pi. It starts interactive pi with the same session directory and continues the recent shell session.
 - Auth helpers are available as: ai auth login [provider] and ai auth status [provider].
+- Config helpers are available as: ai setup, ai models, ai config get, ai config set model <model>, and ai config alias <name> <model> [--thinking <level>].
 - The upgrade helper is available as: ai upgrade [version].
 - The @b4fun/ai-cli config root is: ${configRoot}
 - The default model config file is: ${configPath}
@@ -83,8 +84,8 @@ ${profileLine}- Enabled tools for this invocation: ${availableTools}
 
 Operational guidance:
 - If the user asks to view, open, or edit ai settings/config/default model, use the paths above.
-- If the user asks to set or change the default model, update ${configPath}, creating the parent directory if needed.
-- If the user asks to add a model alias, update the modelAliases object in ${configPath}.
+- If the user asks to set or change the default model, prefer suggesting or running ai config set model <model> instead of editing JSON by hand.
+- If the user asks to add a model alias, prefer suggesting or running ai config alias <name> <model> [--thinking <level>] instead of editing JSON by hand.
 ${bashGuidance}${foregroundGuidance}`;
 }
 

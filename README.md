@@ -18,6 +18,7 @@ Smart base models can usually follow a few local rules and knock out focused tas
 - Adds a `foreground` tool for interactive programs such as `vim`, `less`, `top`, and REPLs
 - Persists sessions per shell, with an optional stable `AI_SESSION_ID`
 - Supports default models, model aliases, thinking levels, and per-command overrides
+- Provides `ai setup`, `ai models`, and `ai config` commands so you do not have to hand-edit JSON
 - Installs optional shell wrappers for zsh, bash, and fish
 
 ## Install
@@ -107,6 +108,15 @@ command ai auth status github-copilot
 
 OAuth providers open the browser or show a device code. API-key providers prompt for a key and save it to pi's `auth.json`.
 
+After installing, the easiest onboarding path is:
+
+```bash
+command ai auth login        # optional; setup can offer this too
+command ai setup
+```
+
+`ai setup` shows configured auth providers, offers login when none are configured, lists available models, prompts for a default model, and can create `fast` and `smart` aliases.
+
 ## Usage
 
 The direct CLI entry point is `ai prompt`:
@@ -120,6 +130,12 @@ command ai version
 command ai --version
 command ai pi
 command ai auth login github-copilot
+command ai setup
+command ai models
+command ai config get
+command ai config set model github-copilot/gpt-5.4-mini
+command ai config alias fast github-copilot/gpt-5.4-mini
+command ai config alias smart anthropic/claude-sonnet-4-5 --thinking high
 command ai upgrade
 ```
 
@@ -249,7 +265,13 @@ ai -m github-copilot/gpt-5.4-mini summarize this repository
 ai -m anthropic/claude-sonnet-4-5 --thinking high think through this migration
 ```
 
-Set a default model in `config.json`:
+Set a default model with the config command:
+
+```bash
+ai config set model github-copilot/gpt-5.4-mini
+```
+
+This writes `config.json` safely, preserving existing fields:
 
 ```json
 {
@@ -274,6 +296,14 @@ You can also define aliases for the names you actually want to type:
 }
 ```
 
+Create those aliases from the CLI with:
+
+```bash
+ai config alias fast github-copilot/gpt-5.4-mini
+ai config alias smart anthropic/claude-sonnet-4-5 --thinking high
+ai config set model fast
+```
+
 Then use them from the CLI:
 
 ```bash
@@ -282,6 +312,18 @@ ai -m smart design a safer approach
 ```
 
 Valid thinking levels are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. You can also use the shorthand `model:thinking`, for example `ai -m smart:medium ...`.
+
+Useful config/model commands:
+
+```bash
+ai setup                         # first-run interactive setup
+ai models                        # models available with configured auth
+ai models --all                  # all registered models
+ai config path                   # print config.json path
+ai config get                    # print full config JSON
+ai config get model              # print one field, dot paths supported
+ai config set thinking low
+```
 
 The config file lives at:
 
@@ -323,7 +365,7 @@ Shell wrapper support status:
 | fish | yes | yes | yes | normal fish behavior | yes, via an Enter-key binding |
 | bash | yes | yes | yes | normal bash behavior | no; use `what\'s`, double quotes, or stdin |
 
-On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The zsh and fish integrations also install Enter-key hooks for the wrapper command so common apostrophes in contractions are escaped before the shell parses the line. Shell wrappers pass through management commands such as `ai auth`, `ai pi`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
+On zsh, the installed wrapper uses `noglob`, so prompts like `??`, `*`, or `[abc]` can be passed through unquoted instead of being expanded by the shell. The zsh and fish integrations also install Enter-key hooks for the wrapper command so common apostrophes in contractions are escaped before the shell parses the line. Shell wrappers pass through management commands such as `ai auth`, `ai config`, `ai models`, `ai setup`, `ai pi`, `ai upgrade`, `ai version`, and `ai shell`; the real binary remains available with `command ai ...`.
 
 ## Sessions
 

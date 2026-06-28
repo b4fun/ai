@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { VERSION } from "../src/version.js";
 
 const node = process.execPath;
 const cli = new URL("../bin/ai.js", import.meta.url).pathname;
 
-function runCli(args) {
-  return execFileSync(node, [cli, ...args], { encoding: "utf8" });
+function runCli(args, options = {}) {
+  return execFileSync(node, [cli, ...args], { encoding: "utf8", ...options });
 }
 
 test("prints package version with version command", () => {
@@ -16,6 +19,24 @@ test("prints package version with version command", () => {
 
 test("prints package version with --version flag", () => {
   assert.equal(runCli(["--version"]), `${VERSION}\n`);
+});
+
+test("config commands write and read model aliases", () => {
+  const xdgHome = fs.mkdtempSync(path.join(os.tmpdir(), "ai-config-"));
+  const env = { ...process.env, XDG_HOME: xdgHome };
+
+  runCli(["config", "set", "model", "fast"], { env });
+  runCli(["config", "alias", "fast", "github-copilot/gpt-5.4-mini"], { env });
+  runCli(["config", "alias", "smart", "anthropic/claude-sonnet-4-5", "--thinking", "high"], { env });
+
+  assert.equal(runCli(["config", "get", "model"], { env }), "fast\n");
+  assert.deepEqual(JSON.parse(runCli(["config", "get"], { env })), {
+    model: "fast",
+    modelAliases: {
+      fast: "github-copilot/gpt-5.4-mini",
+      smart: { model: "anthropic/claude-sonnet-4-5", thinking: "high" },
+    },
+  });
 });
 
 test("rejects prompt-only flags for upgrade command", () => {
@@ -39,7 +60,7 @@ test("pi command requires an interactive terminal", () => {
 test("bash shell wrapper forwards model and thinking flags", () => {
   const snippet = runCli(["shell", "init", "bash", "--name", "ai"]);
 
-  assert.match(snippet, /auth\|pi\|upgrade\|version\|shell/);
+  assert.match(snippet, /auth\|config\|models\|setup\|pi\|upgrade\|version\|shell/);
   assert.match(snippet, /local model=/);
   assert.match(snippet, /local thinking=/);
   assert.match(snippet, /local profile=/);
@@ -61,7 +82,7 @@ test("zsh shell wrapper installs apostrophe accept-line helper", () => {
 test("fish shell wrapper forwards model and thinking flags", () => {
   const snippet = runCli(["shell", "init", "fish", "--name", "ai"]);
 
-  assert.match(snippet, /case auth pi upgrade version shell/);
+  assert.match(snippet, /case auth config models setup pi upgrade version shell/);
   assert.match(snippet, /set -l model/);
   assert.match(snippet, /set -l thinking/);
   assert.match(snippet, /set -l profile/);

@@ -3,7 +3,10 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { clearShellProfileFork, getShellSessionDir, readConfig, readShellProfileState, writeShellProfile } from "../src/config.js";
+import readline from "node:readline/promises";
+import { stdin as input } from "node:process";
+import { clearShellProfileFork, getConfigPath, getShellSessionDir, readConfig, readShellProfileState, writeConfig, writeShellProfile } from "../src/config.js";
+import { isPlainObject, validateThinkingLevel } from "../src/model-config.js";
 import { VERSION } from "../src/version.js";
 
 function parseGlobalOptions(argv) {
@@ -187,7 +190,7 @@ function createCommonWrapperBody(commandName) {
   const quotedCommand = shellSingleQuote(commandName);
   return [
     "  case \"${1-}\" in",
-    "    auth|pi|upgrade|version|shell)",
+    "    auth|config|models|setup|pi|upgrade|version|shell)",
     `      command ${quotedCommand} \"$@\"`,
     "      return $?",
     "      ;;",
@@ -322,7 +325,7 @@ function createZshApostropheWidget(wrapperName, fnName) {
     "    local rest=\"$match[3]\"",
     "    local first=\"${rest%%[[:space:]]*}\"",
     "    case \"$first\" in",
-    "      auth|pi|upgrade|version|shell) ;;",
+    "      auth|config|models|setup|pi|upgrade|version|shell) ;;",
     "      *)",
     `        ${escapeFn} \"$rest\"`,
     `        BUFFER=\"\${prefix}${wrapper} $REPLY\"`,
@@ -411,7 +414,7 @@ function createFishApostropheBindings(wrapperName) {
     "        set -l rest $matches[3]",
     "        set -l first (string match -r '^[^[:space:]]+' -- $rest)",
     "        switch $first",
-    "            case auth pi upgrade version shell",
+    "            case auth config models setup pi upgrade version shell",
     "            case '*'",
     `                set -l escaped (${escapeFn} "$rest")`,
     `                commandline -r \"$prefix${wrapper} $escaped\"`,
@@ -453,7 +456,7 @@ function createShellSnippet(shellName, wrapperName, commandName = "ai") {
     return [
       `function ${sanitizeIdentifier(wrapperName)}`,
       "    switch $argv[1]",
-      "        case auth pi upgrade version shell",
+      "        case auth config models setup pi upgrade version shell",
       `            command ${shellSingleQuote(commandName)} $argv`,
       "            return $status",
       "    end",
@@ -705,6 +708,254 @@ async function readStdin() {
   });
 }
 
+function createQuestioner() {
+  return readline.createInterface({ input, output: process.stderr });
+}
+
+async function askSetupText(question, { allowEmpty = false } = {}) {
+  const rl = createQuestioner();
+  try {
+    while (true) {
+      const answer = await rl.question(question);
+      if (allowEmpty || answer.trim()) return answer;
+      console.error("A value is required.");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+async function askYesNo(question, defaultValue = true) {
+  const suffix = defaultValue ? " [Y/n] " : " [y/N] ";
+  while (true) {
+    const answer = (await askSetupText(`${question}${suffix}`, { allowEmpty: true })).trim().toLowerCase();
+    if (!answer) return defaultValue;
+    if (answer === "y" || answer === "yes") return true;
+    if (answer === "n" || answer === "no") return false;
+    console.error("Please answer yes or no.");
+  }
+}
+
+async function createLoadedRegistry() {
+  const { AuthStorage, ModelRegistry } = await import("@earendil-works/pi-coding-agent");
+  const authStorage = AuthStorage.create();
+  return { authStorage, modelRegistry: ModelRegistry.create(authStorage) };
+}
+
+function getProviderRows(modelRegistry, { configuredOnly = false } = {}) {
+  const providers = [...new Set(modelRegistry.getAll().map((model) => model.provider))].sort();
+  return providers
+    .map((provider) => {
+      const status = modelRegistry.getProviderAuthStatus(provider);
+      return {
+        provider,
+        name: modelRegistry.getProviderDisplayName(provider),
+        configured: status.configured === true,
+        source: status.configured ? (status.label ? `${status.source} (${status.label})` : status.source) : "not configured",
+      };
+    })
+    .filter((row) => !configuredOnly || row.configured);
+}
+
+function printRows(headers, rows) {
+  if (rows.length === 0) return;
+  const widths = headers.map((header, index) => Math.max(header.length, ...rows.map((row) => row[index].length)));
+  const formatRow = (row) => row.map((cell, index) => cell.padEnd(widths[index])).join("  ").trimEnd();
+  console.log(formatRow(headers));
+  console.log(formatRow(widths.map((width) => "-".repeat(width))));
+  for (const row of rows) console.log(formatRow(row));
+}
+
+function modelSpec(model) {
+  return `${model.provider}/${model.id}`;
+}
+
+function getModelsForListing(modelRegistry, { all = false } = {}) {
+  const models = all ? modelRegistry.getAll() : modelRegistry.getAvailable();
+  return [...models].sort((a, b) => modelSpec(a).localeCompare(modelSpec(b)));
+}
+
+function printModelList(models) {
+  if (models.length === 0) {
+    console.log("No models available for configured auth providers. Run `ai auth login` or `ai setup`.");
+    return;
+  }
+
+  printRows(
+    ["Model", "Name", "Reasoning"],
+    models.map((model) => [modelSpec(model), model.name || model.id, model.reasoning ? "yes" : "no"]),
+  );
+}
+
+async function runModels(argv) {
+  let all = false;
+  for (const arg of argv) {
+    if (arg === "--all") {
+      all = true;
+      continue;
+    }
+    throw new Error(`Unexpected models argument: ${arg}`);
+  }
+
+  const { modelRegistry } = await createLoadedRegistry();
+  const models = getModelsForListing(modelRegistry, { all });
+  printModelList(models);
+}
+
+function getConfigValue(config, key) {
+  if (!key) return config;
+  return key.split(".").reduce((value, part) => (value == null ? undefined : value[part]), config);
+}
+
+function parseAliasArgs(argv) {
+  const positionals = [];
+  let thinking;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--thinking") {
+      thinking = argv[index + 1];
+      if (!thinking) throw new Error("--thinking requires a level value");
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--thinking=")) {
+      thinking = arg.slice("--thinking=".length);
+      if (!thinking) throw new Error("--thinking requires a level value");
+      continue;
+    }
+    positionals.push(arg);
+  }
+
+  if (positionals.length !== 2) {
+    throw new Error("Usage: ai config alias <name> <model> [--thinking <level>]");
+  }
+
+  return { name: positionals[0], model: positionals[1], thinking: validateThinkingLevel(thinking, "config alias") };
+}
+
+function runConfig(argv) {
+  const action = argv[0];
+
+  if (action === "path") {
+    if (argv.length !== 1) throw new Error(`Unexpected config path arguments: ${argv.slice(1).join(" ")}`);
+    console.log(getConfigPath());
+    return;
+  }
+
+  if (action === "get") {
+    if (argv.length > 2) throw new Error(`Unexpected config get arguments: ${argv.slice(2).join(" ")}`);
+    const value = getConfigValue(readConfig(), argv[1]);
+    if (value === undefined) {
+      process.exitCode = 1;
+      return;
+    }
+    console.log(typeof value === "string" ? value : JSON.stringify(value, null, 2));
+    return;
+  }
+
+  if (action === "set") {
+    if (argv.length !== 3) throw new Error("Usage: ai config set <model|thinking> <value>");
+    const [, key, value] = argv;
+    if (key !== "model" && key !== "defaultModel" && key !== "thinking" && key !== "defaultThinkingLevel") {
+      throw new Error("Only model/defaultModel and thinking/defaultThinkingLevel can be set directly.");
+    }
+    if (key === "thinking" || key === "defaultThinkingLevel") validateThinkingLevel(value, "config set");
+    const config = readConfig();
+    config[key] = value;
+    writeConfig(config);
+    console.log(`Wrote ${key} to ${getConfigPath()}`);
+    return;
+  }
+
+  if (action === "alias") {
+    const { name, model, thinking } = parseAliasArgs(argv.slice(1));
+    const config = readConfig();
+    config.modelAliases = isPlainObject(config.modelAliases) ? { ...config.modelAliases } : {};
+    config.modelAliases[name] = thinking ? { model, thinking } : model;
+    writeConfig(config);
+    console.log(`Wrote alias ${name} to ${getConfigPath()}`);
+    return;
+  }
+
+  throw new Error(`Unknown config command: ${action || "(missing)"}`);
+}
+
+function printAuthSummary(modelRegistry) {
+  const configured = getProviderRows(modelRegistry, { configuredOnly: true });
+  if (configured.length === 0) {
+    console.log("No auth providers configured.");
+    return false;
+  }
+
+  console.log("Configured auth providers:");
+  printRows(["Provider", "Name", "Source"], configured.map((row) => [row.provider, row.name, row.source]));
+  return true;
+}
+
+async function selectSetupModel(modelRegistry) {
+  const models = getModelsForListing(modelRegistry);
+  const choices = models.length > 0 ? models : getModelsForListing(modelRegistry, { all: true });
+  if (choices.length === 0) throw new Error("No models are registered.");
+
+  console.log("Available models:");
+  choices.slice(0, 50).forEach((model, index) => {
+    const reasoning = model.reasoning ? ", reasoning" : "";
+    console.log(`  ${index + 1}. ${modelSpec(model)} (${model.name || model.id}${reasoning})`);
+  });
+  if (choices.length > 50) console.log(`  ... ${choices.length - 50} more; type a full provider/model id to choose one not shown.`);
+
+  while (true) {
+    const answer = (await askSetupText("Default model number or provider/model id: ")).trim();
+    const byIndex = Number(answer);
+    if (Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= Math.min(choices.length, 50)) {
+      return modelSpec(choices[byIndex - 1]);
+    }
+    if (choices.some((model) => modelSpec(model) === answer)) return answer;
+    console.error("Unknown model. Try again.");
+  }
+}
+
+async function runSetup(argv) {
+  if (argv.length > 0) throw new Error(`Unexpected setup arguments: ${argv.join(" ")}`);
+  if (!process.stdin.isTTY || !process.stderr.isTTY) throw new Error("Setup requires an interactive terminal.");
+
+  const { modelRegistry } = await createLoadedRegistry();
+  console.log(`Config file: ${getConfigPath()}`);
+  const hadAuth = printAuthSummary(modelRegistry);
+
+  if (!hadAuth && await askYesNo("Log in to a provider now?", true)) {
+    const { loginProvider } = await import("../src/auth.js");
+    await loginProvider();
+    modelRegistry.refresh();
+    printAuthSummary(modelRegistry);
+  }
+
+  const defaultModel = await selectSetupModel(modelRegistry);
+  const createAliases = await askYesNo("Create/update common aliases fast and smart?", true);
+  const config = readConfig();
+
+  if (createAliases) {
+    config.model = "fast";
+    config.modelAliases = isPlainObject(config.modelAliases) ? { ...config.modelAliases } : {};
+    config.modelAliases.fast = defaultModel;
+
+    const smart = (await askSetupText(`Smart model [${defaultModel}]: `, { allowEmpty: true })).trim() || defaultModel;
+    const thinking = validateThinkingLevel(
+      (await askSetupText("Smart thinking level (off/minimal/low/medium/high/xhigh) [high]: ", { allowEmpty: true })).trim() || "high",
+      "setup smart alias",
+    );
+    config.modelAliases.smart = { model: smart, thinking };
+  } else {
+    config.model = defaultModel;
+  }
+
+  writeConfig(config);
+  console.log(`Wrote ${getConfigPath()}`);
+  console.log(`Default model: ${config.model}`);
+  if (createAliases) console.log("Aliases: fast, smart");
+}
+
 async function runPrompt(askLlm, model, thinkingLevel, profile, forkSession) {
   const { ask } = await import("../src/index.js");
   const { confirmLoginAfterAuthError } = await import("../src/auth.js");
@@ -848,7 +1099,7 @@ async function runAuth(argv) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [--thinking <level>] [-P|--profile <name>] [prompt <ask llm> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [-P|--profile <name>] [prompt <ask llm> | setup | models [--all] | config <path|get|set|alias> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
 }
 
 function parseCli(argv) {
@@ -868,6 +1119,18 @@ function parseCli(argv) {
 
   if (rest[0] === "upgrade") {
     return { mode: "upgrade", model, thinkingLevel, profile, argv: rest.slice(1) };
+  }
+
+  if (rest[0] === "setup") {
+    return { mode: "setup", model, thinkingLevel, profile, argv: rest.slice(1) };
+  }
+
+  if (rest[0] === "models") {
+    return { mode: "models", model, thinkingLevel, profile, argv: rest.slice(1) };
+  }
+
+  if (rest[0] === "config") {
+    return { mode: "config", model, thinkingLevel, profile, argv: rest.slice(1) };
   }
 
   if (rest[0] === "auth") {
@@ -950,6 +1213,54 @@ async function main() {
       return;
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  if (parsed.mode === "setup") {
+    if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+      console.error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
+      process.exit(1);
+    }
+
+    try {
+      await runSetup(parsed.argv);
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      printUsage();
+      process.exit(1);
+    }
+  }
+
+  if (parsed.mode === "models") {
+    if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+      console.error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
+      process.exit(1);
+    }
+
+    try {
+      await runModels(parsed.argv);
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      printUsage();
+      process.exit(1);
+    }
+  }
+
+  if (parsed.mode === "config") {
+    if (parsed.model || parsed.thinkingLevel || parsed.profile) {
+      console.error("The model, thinking, and profile flags are only supported in prompt and pi modes.");
+      process.exit(1);
+    }
+
+    try {
+      runConfig(parsed.argv);
+      return;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      printUsage();
       process.exit(1);
     }
   }

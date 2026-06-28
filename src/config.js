@@ -77,3 +77,21 @@ export function readConfig() {
     throw new Error(`Failed to read config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
+export function writeConfig(config) {
+  const configPath = getConfigPath();
+  const configDir = path.dirname(configPath);
+  fs.mkdirSync(configDir, { recursive: true });
+
+  const data = `${JSON.stringify(config, null, 2)}\n`;
+  const tempPath = path.join(configDir, `.config.${process.pid}.${Date.now()}.tmp`);
+  fs.writeFileSync(tempPath, data, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(tempPath, configPath);
+}
+
+export function updateConfig(updater) {
+  const current = readConfig();
+  const next = updater({ ...current });
+  writeConfig(next ?? current);
+  return next ?? current;
+}
