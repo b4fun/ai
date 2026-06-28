@@ -1,7 +1,7 @@
 {
   "name": "@b4fun/ai-cli",
   "version": "0.1.0-alpha.9",
-  "description": "Minimal CLI wrapper around pi coding agent.",
+  "description": "Pi in your shell.",
   "type": "module",
   "bin": {
     "ai": "bin/ai.js"
