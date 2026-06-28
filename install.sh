@@ -45,11 +45,40 @@ asset_archive="$asset_name.tar.gz"
 asset_sha="$asset_archive.sha256"
 
 find_asset_url() {
-  grep -F '"browser_download_url":' "$2" \
-    | grep -F "/$1\"" \
-    | sed 's/.*"browser_download_url": "\(.*\)".*/\1/' \
-    | head -n 1 \
-    || true
+  python3 - "$1" "$2" <<'PY' || true
+import json
+import sys
+
+name = sys.argv[1]
+path = sys.argv[2]
+
+with open(path, 'r', encoding='utf-8') as fh:
+    data = json.load(fh)
+
+
+def iter_assets(value):
+    if isinstance(value, list):
+        for item in value:
+            yield from iter_assets(item)
+    elif isinstance(value, dict):
+        assets = value.get('assets')
+        if isinstance(assets, list):
+            for asset in assets:
+                if isinstance(asset, dict):
+                    yield asset
+        elif value.get('name') and value.get('url'):
+            yield value
+
+
+for asset in iter_assets(data):
+    if asset.get('name') == name:
+        print(asset.get('url', ''))
+        break
+PY
+}
+
+curl_release_asset() {
+  curl -fsSL -H 'Accept: application/octet-stream' "$1" -o "$2"
 }
 
 case "$VERSION" in
@@ -70,9 +99,20 @@ case "$VERSION" in
     fi
     ;;
   *)
+    release_json="$TMP_DIR/release.json"
+    curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$VERSION" -o "$release_json"
     asset_file="$asset_archive"
-    asset_url="https://github.com/$REPO/releases/download/$VERSION/$asset_archive"
-    sha_url="https://github.com/$REPO/releases/download/$VERSION/$asset_sha"
+    asset_url="$(find_asset_url "$asset_archive" "$release_json")"
+    sha_url="$(find_asset_url "$asset_sha" "$release_json")"
+    if [ -z "$asset_url" ]; then
+      asset_file="$asset_name"
+      asset_url="$(find_asset_url "$asset_name" "$release_json")"
+      sha_url="$(find_asset_url "$asset_name.sha256" "$release_json")"
+    fi
+    if [ -z "$asset_url" ]; then
+      echo "Could not find release asset for $VERSION: $asset_archive" >&2
+      exit 1
+    fi
     ;;
 esac
 
@@ -80,7 +120,7 @@ mkdir -p "$INSTALL_DIR"
 install_path="$INSTALL_DIR/ai"
 
 download_path="$TMP_DIR/$asset_file"
-if ! curl -fsSL "$asset_url" -o "$download_path"; then
+if ! curl_release_asset "$asset_url" "$download_path"; then
   case "$VERSION" in
     latest)
       exit 1
@@ -91,13 +131,13 @@ if ! curl -fsSL "$asset_url" -o "$download_path"; then
       sha_url="https://github.com/$REPO/releases/download/$VERSION/$asset_name.sha256"
       asset_file="$asset_name"
       download_path="$TMP_DIR/$asset_file"
-      curl -fsSL "$asset_url" -o "$download_path"
+      curl_release_asset "$asset_url" "$download_path"
       ;;
   esac
 fi
 
 sha_path="$TMP_DIR/$(basename "$sha_url")"
-if curl -fsSL "$sha_url" -o "$sha_path" 2>/dev/null; then
+if curl_release_asset "$sha_url" "$sha_path" 2>/dev/null; then
   expected_sha="$(awk '{print $1}' "$sha_path")"
   if command -v sha256sum >/dev/null 2>&1; then
     actual_sha="$(sha256sum "$download_path" | awk '{print $1}')"
