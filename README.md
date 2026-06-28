@@ -2,7 +2,17 @@
 
 [Pi](https://pi.dev) in your shell.
 
-## Start here
+<p align="center">
+  <img src="docs/demos/minimal.gif" alt="Demo of @b4fun/ai-cli answering a prompt from the terminal" width="800">
+</p>
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh
+```
+
+## Read more
 
 - Install: [`docs/install.md`](docs/install.md)
 - Auth: [`docs/auth.md`](docs/auth.md)

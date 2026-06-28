@@ -7,6 +7,7 @@
 - [Profiles](profiles.md)
 - [Shell integration](shell-integration.md)
 - [Sessions](sessions.md)
+- [Demos](demos/README.md)
 
 ## For Developer
 

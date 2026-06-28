@@ -3,6 +3,14 @@
 The direct CLI entry point is `ai prompt`:
 
 ```bash
+ai --help
+ai help
+```
+
+Use either form to show the top-level command reference.
+
+
+```bash
 command ai prompt Say hello
 command ai prompt What files are in this directory?
 command ai -m anthropic/claude-sonnet-4-5 prompt Explain this project

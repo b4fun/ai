@@ -21,6 +21,17 @@ test("prints package version with --version flag", () => {
   assert.equal(runCli(["--version"]), `${VERSION}\n`);
 });
 
+test("prints top-level help with --help flag", () => {
+  assert.match(runCli(["--help"]), /Usage: ai /);
+  assert.match(runCli(["--help"]), /Top-level commands:/);
+  assert.match(runCli(["--help"]), /help\s+Show this help text/);
+});
+
+test("prints top-level help with help command", () => {
+  assert.match(runCli(["help"]), /Usage: ai /);
+  assert.match(runCli(["help"]), /prompt\s+Ask the model a question/);
+});
+
 test("config commands write and read model aliases", () => {
   const xdgHome = fs.mkdtempSync(path.join(os.tmpdir(), "ai-config-"));
   const env = { ...process.env, XDG_HOME: xdgHome };

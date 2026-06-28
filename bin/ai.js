@@ -1099,7 +1099,22 @@ async function runAuth(argv) {
 }
 
 function printUsage() {
-  console.error("Usage: ai [-m <model>] [--thinking <level>] [-P|--profile <name>] [prompt <ask llm> | setup | models [--all] | config <path|get|set|alias> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
+  console.error("Usage: ai [-m <model>] [--thinking <level>] [-P|--profile <name>] [help | prompt <ask llm> | setup | models [--all] | config <path|get|set|alias> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]");
+}
+
+function printHelp() {
+  console.log("Usage: ai [-m <model>] [--thinking <level>] [-P|--profile <name>] [help | prompt <ask llm> | setup | models [--all] | config <path|get|set|alias> | pi | auth <login|status> [provider] | version | upgrade [version] | shell <init|install> [shell]]\n");
+  console.log("Top-level commands:");
+  console.log("  help         Show this help text");
+  console.log("  prompt       Ask the model a question");
+  console.log("  setup        Configure auth and local settings");
+  console.log("  models       List available models");
+  console.log("  config       Read or update config values");
+  console.log("  pi           Start interactive pi");
+  console.log("  auth         Log in or show auth status");
+  console.log("  version      Print the CLI version");
+  console.log("  upgrade      Update ai to a newer version");
+  console.log("  shell        Print or install shell integration");
 }
 
 function parseCli(argv) {
@@ -1108,6 +1123,10 @@ function parseCli(argv) {
   }
 
   const { model, thinkingLevel, profile, rest } = parseGlobalOptions(argv);
+
+  if (rest[0] === "help" || rest[0] === "--help" || rest[0] === "-h") {
+    return { mode: "help", model, thinkingLevel, profile };
+  }
 
   if (rest[0] === "shell" && (rest[1] === "init" || rest[1] === "install")) {
     return { mode: "shell", model, thinkingLevel, profile, argv: rest.slice(1) };
@@ -1185,6 +1204,11 @@ async function main() {
     console.error(error instanceof Error ? error.message : String(error));
     printUsage();
     process.exit(1);
+  }
+
+  if (parsed.mode === "help") {
+    printHelp();
+    return;
   }
 
   if (parsed.mode === "version") {
