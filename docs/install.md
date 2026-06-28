@@ -9,7 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.0
+curl -fsSL https://raw.githubusercontent.com/b4fun/ai/main/install.sh | sh -s -- v0.1.1
 ```
 
 Customize the shell wrapper name:
@@ -40,7 +40,7 @@ command ai upgrade
 Upgrade to a specific release:
 
 ```bash
-command ai upgrade v0.1.0
+command ai upgrade v0.1.1
 ```
 
 If shell integration changes after an upgrade, refresh it:
