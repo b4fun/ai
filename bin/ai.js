@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,14 @@ import readline from "node:readline/promises";
 import { stdin as input } from "node:process";
 import { clearShellProfileFork, getConfigPath, getShellSessionDir, readConfig, readShellProfileState, writeConfig, writeShellProfile } from "../src/config.js";
 import { isPlainObject, validateThinkingLevel } from "../src/model-config.js";
-import { VERSION } from "../src/version.js";
+
+const require = createRequire(import.meta.url);
+
+function readPackageVersion() {
+  return require("../package.json").version;
+}
+
+const VERSION = process.env.B4FUN_AI_VERSION || readPackageVersion();
 
 function parseGlobalOptions(argv) {
   let model;

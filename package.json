@@ -1,6 +1,6 @@
 {
   "name": "@b4fun/ai-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pi in your shell.",
   "type": "module",
   "bin": {
@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "start": "node bin/ai.js",
-    "check": "node --check src/index.js && node --check src/auth.js && node --check src/config.js && node --check src/model-config.js && node --check src/profiles.js && node --check src/version.js && node --check bin/ai.js && node --check scripts/build-sea.mjs",
+    "check": "node --check src/index.js && node --check src/auth.js && node --check src/config.js && node --check src/model-config.js && node --check src/profiles.js && node --check bin/ai.js && node --check scripts/build-sea.mjs",
     "test": "node --test",
     "build:sea": "node scripts/build-sea.mjs",
     "build": "npm run build:sea"

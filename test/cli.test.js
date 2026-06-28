@@ -4,7 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { VERSION } from "../src/version.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require("../package.json");
 
 const node = process.execPath;
 const cli = new URL("../bin/ai.js", import.meta.url).pathname;
