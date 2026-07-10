@@ -11,7 +11,7 @@ Guidance for future work in this repository.
 ## Versioning
 - `package.json` is the source of truth for the project version.
 - Do not maintain a separate checked-in version file.
-- The standalone SEA build injects the package version at build time.
+- The standalone SEA build uses `B4FUN_AI_VERSION` when set and otherwise injects the package version.
 - When bumping a release version, update:
   - `package.json`
   - `package-lock.json`
@@ -33,7 +33,7 @@ Guidance for future work in this repository.
 
 ## Release workflow guardrails
 - The release workflow should smoke test the SEA binary.
-- The smoke test should confirm `dist/sea/ai --version` matches `package.json`.
+- The release smoke test should confirm `dist/sea/ai --version` matches the release tag without its leading `v`.
 - If the release artifact fails, check whether the issue is:
   - version mismatch
   - runtime access to repo files that do not exist in SEA
