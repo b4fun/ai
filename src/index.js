@@ -8,6 +8,7 @@ import {
   readShellProfile,
 } from "./config.js";
 import { resolveConfiguredModel } from "./model-config.js";
+import { getRegistryCatalogPath, startCatalogRefresh } from "./catalog.js";
 import {
   buildProfiledPrompt,
   getProfileAppendSystemPrompt,
@@ -190,7 +191,8 @@ export async function ask(askLlm, options = {}) {
   const profileAppendSystemPrompt = getProfileAppendSystemPrompt(profile);
   const tools = getProfileTools(profile) ?? ["read", "bash", "edit", "write", "foreground"];
   const authStorage = AuthStorage.create();
-  const modelRegistry = ModelRegistry.create(authStorage);
+  startCatalogRefresh();
+  const modelRegistry = ModelRegistry.create(authStorage, getRegistryCatalogPath());
   const model = resolveModel(modelRegistry, modelSpec);
   const sessionManager = SessionManager.continueRecent(cwd, sessionDir);
   const existingContext = sessionManager.buildSessionContext();

@@ -7,6 +7,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input } from "node:process";
 import { clearShellProfileFork, getConfigPath, getShellSessionDir, readConfig, readShellProfileState, writeConfig, writeShellProfile } from "../src/config.js";
+import { getRegistryCatalogPath, refreshCatalog, releaseCatalogRefreshLock, startCatalogRefresh } from "../src/catalog.js";
 import { isPlainObject, validateThinkingLevel } from "../src/model-config.js";
 
 const require = createRequire(import.meta.url);
@@ -747,7 +748,8 @@ async function askYesNo(question, defaultValue = true) {
 async function createLoadedRegistry() {
   const { AuthStorage, ModelRegistry } = await import("@earendil-works/pi-coding-agent");
   const authStorage = AuthStorage.create();
-  return { authStorage, modelRegistry: ModelRegistry.create(authStorage) };
+  startCatalogRefresh();
+  return { authStorage, modelRegistry: ModelRegistry.create(authStorage, getRegistryCatalogPath()) };
 }
 
 function getProviderRows(modelRegistry, { configuredOnly = false } = {}) {
@@ -1204,6 +1206,15 @@ function printShellInit({ shellName, wrapperName, commandName = "ai" }) {
 }
 
 async function main() {
+  if (process.argv.slice(2).join(" ") === "--refresh-model-catalog") {
+    try {
+      await refreshCatalog();
+    } finally {
+      releaseCatalogRefreshLock();
+    }
+    return;
+  }
+
   let parsed;
 
   try {
