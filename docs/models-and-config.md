@@ -2,6 +2,8 @@
 
 Use `-m` or `--model` to override the model for one invocation. Use `--thinking` to override the thinking level:
 
+`ai` refreshes pi's generated model catalog in the background when a command needs models. The command always uses the last valid cached catalog, so a newly published model is normally available on the next invocation. The cache is refreshed at most every six hours and is stored under `@b4fun-ai/catalog/models.json` in the same state root as your config.
+
 ```bash
 ai -m github-copilot/gpt-5.4-mini summarize this repository
 ai -m anthropic/claude-sonnet-4-5 --thinking high think through this migration
