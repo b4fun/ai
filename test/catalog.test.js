@@ -4,7 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseCatalogIndex, parseProviderModels } from "../src/catalog.js";
+import { getRegistryCatalogPath, parseCatalogIndex, parseProviderModels, refreshCatalog } from "../src/catalog.js";
+import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 
 const node = process.execPath;
 const cli = new URL("../bin/ai.js", import.meta.url).pathname;
@@ -20,13 +21,54 @@ test("parses generated catalog index and provider model objects", () => {
     export const OPENAI_CODEX_MODELS = {
       "gpt-5.6-terra": {
         id: "gpt-5.6-terra", name: "GPT-5.6 Terra", api: "openai-codex-responses",
-        provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", reasoning: true,
+        provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", compat: { supportsToolSearch: true }, reasoning: true,
         thinkingLevelMap: { "xhigh": "xhigh", "max": "max" }, input: ["text", "image"],
-        cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125 }, contextWindow: 372000, maxTokens: 128000,
+        cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125,
+          tiers: [{ inputTokensAbove: 272000, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 6.25 }] },
+        contextWindow: 372000, maxTokens: 128000,
       } satisfies Model<"openai-codex-responses">,
     } as const;
   `);
   assert.equal(models[0].id, "gpt-5.6-terra");
+});
+
+test("loads generated compatibility, tiered costs, and future thinking metadata", async () => {
+  const previousXdgHome = process.env.XDG_HOME;
+  const xdgHome = fs.mkdtempSync(path.join(os.tmpdir(), "ai-catalog-refresh-"));
+  process.env.XDG_HOME = xdgHome;
+  const indexSource = `
+    import { OPENAI_CODEX_MODELS } from "./providers/openai-codex.models.ts";
+    export const MODELS = { "openai-codex": OPENAI_CODEX_MODELS } as const;
+  `;
+  const providerSource = `
+    export const OPENAI_CODEX_MODELS = {
+      terra: {
+        id: "terra", name: "Terra", api: "openai-codex-responses", provider: "openai-codex",
+        baseUrl: "https://example.test", compat: { supportsToolSearch: true }, reasoning: true,
+        thinkingLevelMap: { xhigh: "xhigh", max: "max" }, input: ["text"],
+        cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0.2,
+          tiers: [{ inputTokensAbove: 100, input: 2, output: 4, cacheRead: 0.2, cacheWrite: 0.4 }] },
+        contextWindow: 200, maxTokens: 100,
+      } satisfies Model<"openai-codex-responses">,
+    } as const;
+  `;
+  const fetchImpl = async (url) => ({
+    ok: true,
+    text: async () => url.endsWith("models.generated.ts") ? indexSource : providerSource,
+  });
+
+  try {
+    await refreshCatalog({ fetchImpl });
+    const registry = ModelRegistry.create(AuthStorage.create(), getRegistryCatalogPath());
+    const model = registry.find("openai-codex", "terra");
+    assert.equal(registry.getError(), undefined);
+    assert.deepEqual(model.compat, { supportsToolSearch: true });
+    assert.equal(model.cost.tiers[0].inputTokensAbove, 100);
+    assert.equal(model.thinkingLevelMap.max, "max");
+  } finally {
+    if (previousXdgHome === undefined) delete process.env.XDG_HOME;
+    else process.env.XDG_HOME = previousXdgHome;
+  }
 });
 
 test("lists models from the cached dynamic catalog", () => {

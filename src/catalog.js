@@ -165,6 +165,7 @@ function toCatalogModel(model) {
     name: model.name,
     api: model.api,
     baseUrl: model.baseUrl,
+    compat: model.compat,
     reasoning: model.reasoning,
     input: model.input,
     contextWindow: model.contextWindow,
@@ -176,11 +177,12 @@ function toCatalogModel(model) {
       output: model.cost.output,
       cacheRead: model.cost.cacheRead,
       cacheWrite: model.cost.cacheWrite,
+      tiers: model.cost.tiers,
     };
   }
   if (model.thinkingLevelMap) {
     result.thinkingLevelMap = Object.fromEntries(
-      Object.entries(model.thinkingLevelMap).filter(([level]) => ["off", "minimal", "low", "medium", "high", "xhigh"].includes(level)),
+      Object.entries(model.thinkingLevelMap).filter(([level]) => ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(level)),
     );
   }
   return Object.fromEntries(Object.entries(result).filter(([, value]) => value !== undefined && value !== ""));
