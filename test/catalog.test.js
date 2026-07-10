@@ -21,7 +21,8 @@ test("parses generated catalog index and provider model objects", () => {
     export const OPENAI_CODEX_MODELS = {
       "gpt-5.6-terra": {
         id: "gpt-5.6-terra", name: "GPT-5.6 Terra", api: "openai-codex-responses",
-        provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", compat: { supportsToolSearch: true }, reasoning: true,
+        provider: "openai-codex", baseUrl: "https://chatgpt.com/backend-api", headers: { "Editor-Version": "vscode/1.107.0" },
+        compat: { supportsToolSearch: true }, reasoning: true,
         thinkingLevelMap: { "xhigh": "xhigh", "max": "max" }, input: ["text", "image"],
         cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 3.125,
           tiers: [{ inputTokensAbove: 272000, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 6.25 }] },
@@ -44,7 +45,8 @@ test("loads generated compatibility, tiered costs, and future thinking metadata"
     export const OPENAI_CODEX_MODELS = {
       terra: {
         id: "terra", name: "Terra", api: "openai-codex-responses", provider: "openai-codex",
-        baseUrl: "https://example.test", compat: { supportsToolSearch: true }, reasoning: true,
+        baseUrl: "https://example.test", headers: { "Editor-Version": "vscode/1.107.0" },
+        compat: { supportsToolSearch: true }, reasoning: true,
         thinkingLevelMap: { xhigh: "xhigh", max: "max" }, input: ["text"],
         cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0.2,
           tiers: [{ inputTokensAbove: 100, input: 2, output: 4, cacheRead: 0.2, cacheWrite: 0.4 }] },
@@ -59,9 +61,12 @@ test("loads generated compatibility, tiered costs, and future thinking metadata"
 
   try {
     await refreshCatalog({ fetchImpl });
-    const registry = ModelRegistry.create(AuthStorage.create(), getRegistryCatalogPath());
+    const authStorage = AuthStorage.create();
+    authStorage.set("openai-codex", { type: "api_key", key: "test-key" });
+    const registry = ModelRegistry.create(authStorage, getRegistryCatalogPath());
     const model = registry.find("openai-codex", "terra");
     assert.equal(registry.getError(), undefined);
+    assert.deepEqual((await registry.getApiKeyAndHeaders(model)).headers, { "Editor-Version": "vscode/1.107.0" });
     assert.deepEqual(model.compat, { supportsToolSearch: true });
     assert.equal(model.cost.tiers[0].inputTokensAbove, 100);
     assert.equal(model.thinkingLevelMap.max, "max");

@@ -244,6 +244,15 @@ export async function ask(askLlm, options = {}) {
       return;
     }
 
+    if (
+      event.type === "message_end" &&
+      event.message?.role === "assistant" &&
+      event.message.stopReason === "error"
+    ) {
+      responseError = new Error(event.message.errorMessage || "The model request failed");
+      return;
+    }
+
     if (event.type === "tool_execution_start") {
       toolOutputById.set(event.toolCallId, "");
       options.onToolStart?.({
@@ -289,8 +298,10 @@ export async function ask(askLlm, options = {}) {
     }
   });
 
+  let responseError;
   try {
     await session.prompt(text);
+    if (responseError) throw responseError;
     return response;
   } finally {
     unsubscribe();
