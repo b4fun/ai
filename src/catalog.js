@@ -165,6 +165,7 @@ function toCatalogModel(model) {
     name: model.name,
     api: model.api,
     baseUrl: model.baseUrl,
+    headers: model.headers,
     compat: model.compat,
     reasoning: model.reasoning,
     input: model.input,
