@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
+const buildVersion = process.env.B4FUN_AI_VERSION || packageJson.version;
 const distDir = path.join(rootDir, "dist", "sea");
 const bundlePath = path.join(distDir, "ai.mjs");
 const seaConfigPath = path.join(distDir, "sea-config.json");
@@ -54,7 +55,7 @@ await build({
   format: "esm",
   target: "node25",
   define: {
-    "process.env.B4FUN_AI_VERSION": JSON.stringify(packageJson.version),
+    "process.env.B4FUN_AI_VERSION": JSON.stringify(buildVersion),
   },
   banner: {
     js: 'import { createRequire as __seaCreateRequire } from "node:module"; const require = globalThis.require ?? __seaCreateRequire(import.meta.url);',
